@@ -1,0 +1,106 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX ext:  <http://codinuum.com/fact/external/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+
+SELECT DISTINCT ?e0 ?field1_ ?field0 ?field0_ ?cname0 ?cname1
+(?cname0 AS ?otherClassName)
+(?cname1 AS ?className)
+(?class1 AS ?originalClass)
+(?class1_ AS ?modifiedClass)
+(?e0 AS ?originalContext)
+(?field1_ AS ?addedField)
+(?cname0 AS ?GROUP)
+WHERE {
+
+
+  {
+    SELECT DISTINCT ?ver ?ver_ ?class1 ?class1_ ?field1_ ?cname1 ?cname1_ ?e0
+    WHERE {
+  
+      {
+        SELECT DISTINCT ?class1_ ?field1_ ?cname1_ ?e0
+        WHERE {
+
+          ?field1_ a java:FieldDeclaration ;
+                   java:inClass ?class1_ ;
+                   chg:insertedOrGrafted ?e0 .
+
+          ?class1_ a java:ClassDeclaration ;
+                   java:fullyQualifiedName ?cname1_ .
+
+        } GROUP BY ?class1_ ?field1_ ?cname1_ ?e0
+      }
+
+      {
+        SELECT DISTINCT ?class1_ ?class1 ?cname1
+        WHERE {
+          ?class1 a java:ClassDeclaration ;
+                  java:fullyQualifiedName ?cname1 ;
+                  chg:mappedTo ?class1_ .
+        } GROUP BY ?class1_ ?class1 ?cname1
+      }
+
+      ?e0 ver:version ?ver .
+
+      ?class1_ ver:version ?ver_ .
+
+      ?ver ver:next ?ver_ .
+      
+      FILTER EXISTS {
+        ?class1 ver:version ?ver .  
+      }
+    } GROUP BY ?ver ?ver_ ?class1 ?class1_ ?field1_ ?cname1 ?cname1_ ?e0
+  }
+      
+  {
+    SELECT DISTINCT ?cname1 ?field0 ?field0_ ?class0 ?class0_ ?cname0
+    WHERE {
+
+      ?ty0 a java:ReferenceType ;
+           src:parent ?field0 ;
+           java:name ?cname1 .
+
+      ?field0 java:inClass ?class0 ;
+              a java:FieldDeclaration ;
+              chg:mappedTo ?field0_ .
+
+      ?class0 a java:ClassDeclaration ;
+              java:fullyQualifiedName ?cname0 ;
+              chg:mappedTo ?class0_ .
+
+    } GROUP BY ?cname1 ?field0 ?field0_ ?class0 ?class0_ ?cname0
+  }
+
+ FILTER (?cname0 != ?cname1)
+  
+  ?class0 ver:version ?ver .  
+  ?class0_ ver:version ?ver_ .
+
+  FILTER EXISTS {
+      ?field0_ a java:FieldDeclaration ;
+               java:inClass ?class0_ .
+  }
+
+  FILTER EXISTS {
+    ?class0_ a java:ClassDeclaration ;
+             java:fullyQualifiedName ?cname0_ .
+
+    ?ty1_ a java:ReferenceType ;
+          src:parent ?field1_ ;
+          java:name ?cname0_ .
+
+    FILTER (?cname0_ != ?cname1_)
+  }
+
+
+}

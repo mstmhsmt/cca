@@ -1,0 +1,97 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX svn:  <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX ccfx: <http://codinuum.com/ontologies/2015/02/ccfx#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+SELECT DISTINCT ?class ?class_ ?cfqn ?cfqn_
+(?class AS ?originalClass)
+(?class_ AS ?modifiedClass)
+(?cfqn AS ?originalClassName)
+(?cfqn_ AS ?modifiedClassName)
+(?cfqn AS ?GROUP)
+WHERE {
+
+  ?class a java:TypeDeclaration ;
+         java:name ?cname ;
+         java:fullyQualifiedName ?cfqn .
+
+  ?class_ a java:TypeDeclaration ;
+          java:name ?cname ;
+          java:fullyQualifiedName ?cfqn_ .
+
+  ?class ver:version ?ver .
+  ?class_ ver:version ?ver_ .
+  ?ver ver:next ?ver_ .
+
+  FILTER (?cfqn != ?cfqn_)
+
+  {
+    FILTER EXISTS {
+      ?pdecl a java:PackageDeclaration ;
+             src:parent ?cu ;
+             java:name ?pname ;
+             chg:relabeled ?pdecl_ .
+
+      ?pdecl_ a java:PackageDeclaration ;
+              src:parent ?cu_ ;
+              java:name ?pname_ .
+
+      ?cu a java:CompilationUnit ;
+          chg:mappedTo ?cu_ .
+
+      ?cu_ a java:CompilationUnit .
+
+      ?class src:parent+ ?cu .
+      ?class_ src:parent+ ?cu_ .
+    }
+  }
+  UNION
+  {
+    ?class chg:removal ?ctx_ .
+    ?class_ chg:addition ?ctx .
+    {
+      SELECT DISTINCT ?ver ?cname (COUNT(DISTINCT ?class) AS ?count)
+      WHERE {
+        ?class a java:TypeDeclaration ;
+               ver:version ?ver ;
+               java:name ?cname .
+      } GROUP BY ?ver ?cname
+    }
+    {
+      SELECT DISTINCT ?ver_ ?cname (COUNT(DISTINCT ?class_) AS ?count_)
+      WHERE {
+        ?class_ a java:TypeDeclaration ;
+                ver:version ?ver_ ;
+                java:name ?cname .
+      } GROUP BY ?ver_ ?cname
+    }
+    FILTER (?count = 1 && ?count_ = 1)
+  }
+  UNION
+  {
+    ?class chg:removal ?ctx_ .
+    ?class_ chg:addition ?ctx .
+
+    FILTER EXISTS {
+      ?rty a java:ReferenceType ;
+           java:refersToDeclaration ?class ;
+           chg:mappedStablyTo ?rty_ ;
+           chg:relabeled ?rty_ .
+
+      ?rty_ a java:ReferenceType ;
+            java:refersToDeclaration ?class_ .
+    }
+  }
+
+
+}
+

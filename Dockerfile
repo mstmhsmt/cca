@@ -10,15 +10,33 @@ RUN set -x && \
 
 COPY LICENSE /opt/cca/
 COPY cca /opt/cca/
+COPY regression_examples /opt/cca/regression_examples/
+COPY configs /opt/cca/configs/
 
 RUN set -x && \
+    cd /opt/cca/ddutil && \
+    rm conf.py common.sh && \
+    mv conf.py.docker conf.py && \
+    mv common.sh.docker common.sh && \
+    cd /opt/cca/scripts && \
+    rm siteconf.py && \
+    mv siteconf.py.docker siteconf.py && \
+    cd /opt/cca/esecfse2018 && \
+    rm conf.py common.sh && \
+    mv conf.py.docker conf.py && \
+    mv common.sh.docker common.sh && \
     cd /root && \
-    apt-get update && \
-    env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    apt update && \
+    env DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends gnupg2 ca-certificates && \
+    echo "deb https://downloads.skewed.de/apt focal main" > /etc/apt/sources.list.d/gt.list && \
+    apt-key adv --no-tty --keyserver keys.openpgp.org --recv-key 612DEFB798507F25 && \
+    apt update && \
+    env DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends \
             sudo \
             vim \
             opam \
-            net-tools \
+            net-tools psmisc time \
+            locales locales-all nkf \
             m4 flex bison automake autoconf \
             libtool pkg-config swig \
             libgmp-dev libssl-dev libz-dev libreadline-dev librdf0-dev libpcre3-dev unixodbc-dev \
@@ -26,17 +44,40 @@ RUN set -x && \
             sloccount \
             unixodbc \
             openjdk-8-jdk \
+            ant ant-optional maven pcregrep \
             python3 python3-dev \
             python3-distutils \
             python3-psutil \
             python3-pygit2 \
+            python3-svn \
             python3-distutils \
-            wget ca-certificates \
-            git rsync && \
+            python3-graph-tool \
+            wget curl git subversion rsync && \
     wget https://bootstrap.pypa.io/get-pip.py && \
     python3 get-pip.py && \
-    pip3 install pyodbc simplejson && \
-    rm get-pip.py
+    pip3 install pyodbc simplejson ortools javalang python-daemon && \
+    rm get-pip.py && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+
+# For installing Defects4J
+
+RUN set -x && \
+    apt update && \
+    env DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends \
+        libdbi-perl libdbd-csv-perl liburi-perl libjson-perl libjson-parse-perl && \
+    cd /opt && \
+    git clone https://github.com/rjust/defects4j.git && \
+    cd defects4j && \
+    ./init.sh && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV PATH $PATH:/opt/defects4j/framework/bin
+
+# For installing Redland
 
 RUN set -x && \
     cd /root && \
@@ -47,6 +88,8 @@ RUN set -x && \
     cd /root && \
     rm -r redland-bindings
 
+# For installing Virtuoso
+
 RUN set -x && \
     cd /root && \
     git clone https://github.com/openlink/virtuoso-opensource && \
@@ -56,6 +99,8 @@ RUN set -x && \
     make && make install && \
     cd /root && \
     rm -r virtuoso-opensource
+
+# For installing Diff/AST
 
 COPY src /root/src/
 
@@ -80,9 +125,6 @@ RUN set -x && \
     cd /root && \
     rm -r src
 
-RUN set -x && \
-    apt-get autoremove -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+#
 
 CMD ["/bin/bash"]

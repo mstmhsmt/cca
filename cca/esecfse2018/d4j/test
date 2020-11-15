@@ -1,0 +1,597 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import re
+from collections import deque
+import shutil
+import logging
+
+CCA_SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(sys.argv[0]))), 'scripts')
+sys.path.append(CCA_SCRIPTS_DIR)
+
+import proc
+from common import setup_logger
+
+logger = logging.getLogger()
+
+TIMEOUT = 300 #sec
+
+
+
+D4J_PROJ_DIR = os.path.join(os.path.dirname(os.path.dirname(shutil.which('defects4j'))), 'projects')
+PROJ_PAT = re.compile(r'^d4j\.project\.id=(?P<proj>.+)$')
+BID_PAT = re.compile(r'^d4j\.bug\.id=(?P<bid>.+)$')
+TRIGGER_TEST_PAT = re.compile(r'^--- (?P<trigger>.+)$')
+STACK_TRACE_PAT = re.compile(r'^at .+\(.+:[0-9]+\).*$')
+CAUSE_PAT = re.compile(r'^(?P<cause>.+?):.*$')
+
+OTHER_FAILS_THRESH_TBL = {
+    'Closure' : {
+        #'22':2,
+        '28':0, '32':2, '34':2, '35':0,
+        #'54':2,
+        '55':0, '74':0, '95':0, '102':0, '109':2, '123':2, '133':2,},
+    'Lang'    : {'3':0, '8':1, '14':0, '17':0, '58':0, '61':0},
+    'Math'    : {'20':0, '38':0, '58':0, '65':0, '83':0},
+#    'Mockito' : {'26':0},
+}
+
+CAUSE_PAT_TBL = {
+    'Chart' : {
+        '6' : { 'org.jfree.chart.util.junit.ShapeListTests::testSerialization' : [r'^junit.framework.AssertionFailedError: expected:<org.jfree.chart.util.ShapeList@.+> but was:<org.jfree.chart.util.ShapeList@.+>.*$'],
+                'org.jfree.chart.util.junit.ShapeListTests::testEquals' : [r'^junit.framework.AssertionFailedError.*$'],
+        },
+        '18' : {
+            'org.jfree.data.category.junit.DefaultCategoryDatasetTests::testBug1835955' : [r'^java.lang.IndexOutOfBoundsException: Index: 0, Size: 0$'],
+            'org.jfree.data.junit.DefaultKeyedValues2DTests::testRemoveColumnByKey' : [r'^java.lang.IndexOutOfBoundsException: Index: 0, Size: 0$'],
+            'org.jfree.data.junit.DefaultKeyedValuesTests::testRemoveValue' : [r'^junit.framework.AssertionFailedError.*$'],
+            'org.jfree.data.junit.DefaultKeyedValuesTests::testGetIndex2' : [r'^junit.framework.AssertionFailedError: expected:<-1> but was:<0>$'], 
+        },
+    },
+    'Closure' : {
+        '2' : { 'com.google.javascript.jscomp.TypeCheckTest::testBadInterfaceExtendsNonExistentInterfaces' : [r'^java.lang.NullPointerException$'] },
+        '12' : { 'com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testIssue794b' : [r'^junit.framework.AssertionFailedError:.*$'] },
+        '21' : { 'com.google.javascript.jscomp.CheckSideEffectsTest::testUselessCode' : [r'^junit.framework.AssertionFailedError: .*expected:<1>.*$'] },
+        '22' : { 'com.google.javascript.jscomp.CheckSideEffectsTest::testUselessCode' : [r'^junit.framework.AssertionFailedError: .*expected:<1>.*$'] },
+        '23' : { 'com.google.javascript.jscomp.PeepholeFoldConstantsTest::testFoldGetElem' : [r'^junit.framework.AssertionFailedError:.*$'] },
+        '28' : {
+            'com.google.javascript.jscomp.InlineCostEstimatorTest::testCost' : [r'^junit.framework.AssertionFailedError: expected:<1>.*$'],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testIssue728' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                r'^Expected: if\(!false\)alert\("x"\);.*$',
+        ], },
+        '32' : {
+            'com.google.javascript.jscomp.IntegrationTest::testIssue701' : [r'^junit.framework.ComparisonFailure: expected:</\*.*$'],
+            'com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParseLicense' : [r'^junit.framework.ComparisonFailure: expected:< Foo.*$'],
+            'com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParsePreserve' : [r'^junit.framework.ComparisonFailure: expected:< Foo.*$'],
+            'com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParseLicenseAscii' : [r'^junit.framework.ComparisonFailure: expected:< Foo.*$'],
+        },
+        '34' : { 'com.google.javascript.jscomp.CodePrinterTest::testManyAdds' : [r'^java.lang.StackOverflowError.*$'], },
+        '35' : { 'com.google.javascript.jscomp.TypeCheckTest::testIssue669' : [r'^junit.framework.AssertionFailedError: unexpected warnings\(s\):.*$',
+                                                                               r'^JSC_TYPE_MISMATCH\. inconsistent return type.*$',
+                                                                               r'^found\s+: \(\{.+: \{.+: number\}\}\|\{.+: number\}\).*$',
+                                                                               r'^required: \{prop1: \(Object\|null\|undefined\)\} at \[testcode\] line 1 : 174.*$',
+        ], },
+        '49' : {
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInline19b' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                  r'^Expected: var x=1;.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInlineIntoLoop' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                       r'^Expected: function foo\(a\)\{var b;return a\}.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInline13' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                 r'^Expected: function foo\(a\)\{return a\}.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInline14' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                 r'^Expected: function foo\(a\)\{return a\+a\}.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInline15' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                 r'^Expected: function foo\(a\)\{return a\+a\}.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInline16' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                 r'^Expected: function foo\(a\)\{return a\+a\}.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInline17' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                 r'^Expected: function foo\(a\)\{return true\}.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInline18' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                 r'^Expected: function foo\(a\)\{var b;return a\}.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInline19' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                 r'^Expected: var x=1;.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testBug1897706' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                   r'^Expected: function foo\(a\)\{\}.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionInjectorTest::testInlineFunctionWithInnerFunction5' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                         r'^Expected: function foo\(\)\{function x\(\).*$',
+            ],
+            'com.google.javascript.jscomp.FunctionToBlockMutatorTest::testMutateWithParameters3' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                    r'^Expected: var a\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionToBlockMutatorTest::testMutateCallInLoopVars1' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                    r'^Expected: var B\$\$inline_1=.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionToBlockMutatorTest::testMutateInitializeUninitializedVars1' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                                 r'^Expected: var b\$\$inline_1=.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionToBlockMutatorTest::testMutateInitializeUninitializedVars2' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                                 r'^Expected: JSCompiler_inline_label_foo_2:.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionToBlockMutatorTest::testMutateFunctionDefinition' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                       r'^Expected: var g\$\$inline_1=.*$',
+            ],
+            'com.google.javascript.jscomp.FunctionToBlockMutatorTest::testMutate8' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                      r'^Expected: var a\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testLoopWithFunctionWithFunction' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                    r'^Expected: function _testLocalVariableInLoop_\(\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testShadowVariables16' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                         r'^Expected: var a=3;var a\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testShadowVariables18' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                         r'^Expected: var a=0;function _goo\(\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testCostBasedInlining11' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                           r'^Expected: var a;var a\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testMixedModeInliningCosting3' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                 r'^Expected: 1\+2\+1\+2\+4\+5\+6\+7\+8\+9\+1\+2\+3\+10;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineNeverMutateConstants' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                  r'^Expected: var x\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineWithThis7' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                       r'^Expected: var a\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testAnonymous1' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                  r'^Expected: var a\$\$inline_0=10;var b\$\$inline_1=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testAnonymous3' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                  r'^Expected: var a\$\$inline_0=10;\(function\(\)\{arguments\}.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testShadowVariables1' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                        r'^Expected: var a=0;var a\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testShadowVariables3' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                        r'^Expected: var a=0;function _bar\(\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testShadowVariables6' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                        r'^Expected: var a=0;function _bar\(a\$\$2\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testShadowVariables7' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                        r'^Expected: var a=3;var a\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testFunctionExpressionCallInlining11b' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                         r'^Expected: var JSCompiler_inline_result\$\$0;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testComplexInlineNoResultNoParamCall3' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                         r'^Expected: function _foo\(\)\{a\(\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testCostBasedInlining9' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                          r'^Expected: var a;var a\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testMethodWithFunctionWithFunction' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                      r'^Expected: function _testLocalVariable_\(\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testFunctionExpressionYCombinator' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                     r'^Expected: var factorial;var M\$\$inline_4=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testComplexInlineVars7' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                          r'^Expected: var b=1;var z;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testComplexFunctionWithFunctionDefinition2a' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                               r'^Expected: var a\$\$inline_0=void 0;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testComplexInline7' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                      r'^Expected: var b=1;JSCompiler_inline_label_f_2:.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testFunctionExpressionOmega' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                               r'^Expected: var f\$\$inline_0=function\(f\$\$1\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions15b' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                          r'^Expected: var JSCompiler_temp_const\$\$0=c;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions15d' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                          r'^Expected: function _x\(\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions16a' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                          r'^Expected: var d;var b\$\$inline_0=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testBug4944818' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                  r'^Expected: HangoutStarter.prototype.launchHangout=function\(\).*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testComplexSample' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                     r'^Expected: var styleSheet\$\$inline_2=.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testNoInlineIfParametersModified1' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                     r'^Expected: var x\$\$inline_0=undefined;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testNoInlineIfParametersModified2' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                     r'^Expected: var x\$\$inline_0=2;x\$\$inline_0=1.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testNoInlineIfParametersModified3' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                     r'^Expected: var x\$\$inline_0=2;x\$\$inline_0\*=2.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testNoInlineIfParametersModified4' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                     r'^Expected: var x\$\$inline_0=2;x\$\$inline_0\?x\$\$inline_0=2:0.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testNoInlineIfParametersModified5' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                     r'^Expected: var y\$\$inline_1=undefined;2\?y\$\$inline_1=2:0.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testNoInlineIfParametersModified6' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                     r'^Expected: var y\$\$inline_1=void 0;2\?y\$\$inline_1=2:0.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testNoInlineIfParametersModified7' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                     r'^Expected: var a\$\$inline_0=1;\+\+a\$\$inline_0.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testIssue423' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                r'^Expected: var \$\$\$inline_0=jQuery;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testComplexFunctionWithFunctionDefinition2' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                              r'^Expected: var a\$\$inline_0=void 0;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testComplexFunctionWithFunctionDefinition3' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                              r'^Expected: var a\$\$inline_0;call\(.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testDecomposeFunctionExpressionInCall' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                         r'^Expected: var JSCompiler_inline_result\$\$0;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineNeverOverrideNewValues' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                    r'^Expected: var a\$\$inline_0=1;\+\+a\$.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineBlockMutableArgs1' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                               r'^Expected: var x\$\$inline_0=\[\];.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineBlockMutableArgs2' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                               r'^Expected: var x\$\$inline_0=new Date;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineBlockMutableArgs3' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                               r'^Expected: var x\$\$inline_0=true&.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineBlockMutableArgs4' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                               r'^Expected: var x\$\$inline_0=\{\};.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions10' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                         r'^Expected: var y;var x\$\$inline_0=i;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions13' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                         r'^Expected: var y;var x\$\$inline_0=i\+\+;.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions22' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                         r'^Expected: var d;JSCompiler_inline_label_plex_1:.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions23' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                         r'^Expected: var d;JSCompiler_inline_label_complex_1:.*$',
+            ],
+            'com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions9' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                        r'^Expected: var y;var x\$\$inline_0=i;.*$',
+            ],
+            'com.google.javascript.jscomp.MakeDeclaredNamesUniqueTest::testMakeLocalNamesUniqueWithContext5' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                                                r'^Expected: var fn=function f\(\).*$',
+            ],
+        },
+        '54' : { 'com.google.javascript.jscomp.TypeCheckTest::testIssue537a' : [
+                     #r'^junit.framework.ComparisonFailure: expected:<\[Function Foo.prototype.method: called with 1 argument\(s\)\..* but was:<\[Property baz never defined on Bar\]>.*$'
+                     r'^junit.framework.ComparisonFailure: expected:<\[Function Foo.prototype.method: called with 1 argument\(s\)\..*$'
+                 ],
+                 'com.google.javascript.jscomp.TypeCheckTest::testIssue537b' : [
+                     #r'^junit.framework.ComparisonFailure: expected:<\[Function Bar.prototype.baz: called with 1 argument\(s\)\..* but was:<\[Property baz never defined on Bar\]>.*$'
+                     r'^junit.framework.ComparisonFailure: expected:<\[Function Bar.prototype.baz: called with 1 argument\(s\)\..*$'
+                 ],
+                 'com.google.javascript.jscomp.TypedScopeCreatorTest::testPropertyOnUnknownSuperClass2' : [
+                     r'^junit.framework.ComparisonFailure: expected:<\[\?\]> but was:<\[number\]>.*$'
+                 ],
+        },
+        '55' : { 'com.google.javascript.jscomp.FunctionRewriterTest::testIssue538' : [r'^java.lang.IllegalStateException: Expected function but was call Reference node.*$'], },
+        '74' : { 'com.google.javascript.jscomp.PeepholeFoldConstantsTest::testFoldComparison3' : [r'^junit.framework.AssertionFailedError:.*$', r'^Expected: x=false.*$'],
+                 'com.google.javascript.jscomp.PeepholeFoldConstantsTest::testInvertibleOperators' : [r'^junit.framework.ComparisonFailure: Expressions did not fold the same.*$'],
+                 'com.google.javascript.jscomp.PeepholeFoldConstantsTest::testCommutativeOperators' : [r'^junit.framework.ComparisonFailure: Expressions did not fold the same.*$'],
+        },
+        '95' : { 'com.google.javascript.jscomp.TypeCheckTest::testQualifiedNameInference5' : [r'^junit.framework.AssertionFailedError: expected a warning.*$'],
+                 'com.google.javascript.jscomp.TypedScopeCreatorTest::testGlobalQualifiedNameInLocalScope' : [r'^junit.framework.AssertionFailedError.*$'],
+        },
+        '102' : { 'com.google.javascript.jscomp.CompilerRunnerTest::testIssue115' : [r'^junit.framework.AssertionFailedError:.*$',
+                                                                                     r'^Expected: function f\(\)\{arguments=Array.prototype.slice.call\(arguments,0\);return arguments\[0\]\}$',
+                                                                                     r'^Result: function f\(\)\{var (.+)=Array.prototype.slice.call\(\1,0\);return \1\[0\]\}$',
+        ], },
+        '109' : { 'com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testStructuralConstructor2' : [r'^junit.framework.AssertionFailedError: extra warning: Bad type annotation. type not recognized due to syntax error.*$'],
+                  'com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testStructuralConstructor3' : [r'^junit.framework.AssertionFailedError: extra warning: Bad type annotation. type not recognized due to syntax error.*$'],
+        },
+        '123' : { 'com.google.javascript.jscomp.CodePrinterTest::testPrintInOperatorInForLoop' : [r'^junit.framework.ComparisonFailure: expected:<for\(a=c\?0:\[\(0 in d\)\];;\)foo\(\)>.*$'], },
+        '133' : { 'com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testTextExtents' : [r'^java.lang.IllegalStateException: Recorded bad position information.*$',
+                                                                                                 r'^start-char: 14.*$',
+                                                                                                 r'^end-char: 13.*$',
+        ], },
+    },
+    'Lang' : {
+        '3' : { 'org.apache.commons.lang3.math.NumberUtilsTest::testStringCreateNumberEnsureNoPrecisionLoss' : [r'^junit.framework.AssertionFailedError.*$'], }, 
+        '8' : { 'org.apache.commons.lang3.time.FastDateFormat_PrinterTest::testCalendarTimezoneRespected' : [r'^junit.framework.AssertionFailedError: expected:<[0-9].*$'],
+                'org.apache.commons.lang3.time.FastDatePrinterTest::testCalendarTimezoneRespected' : [r'^junit.framework.AssertionFailedError: expected:<[0-9].*$'],
+        },
+        '12' : { 'org.apache.commons.lang3.RandomStringUtilsTest::testExceptions' : [r'^java.lang.ArrayIndexOutOfBoundsException: [0-9]+.*$'],
+                 'org.apache.commons.lang3.RandomStringUtilsTest::testLANG805' : [r'^java.lang.ArrayIndexOutOfBoundsException: [0-9]+.*$'],
+        },
+        '14' : { 'org.apache.commons.lang3.StringUtilsEqualsIndexOfTest::testEquals' : [r'^junit.framework.AssertionFailedError.*$'], },
+        '17' : { 'org.apache.commons.lang3.StringEscapeUtilsTest::testLang720' : [r'^junit.framework.ComparisonFailure: expected:<.+> but was:<.+\[\?\]>.*$'], },
+        '34' : { 'org.apache.commons.lang3.builder.ToStringBuilderTest::testObjectCycle' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionHierarchy' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testSelfInstanceTwoVarsReflectionObjectCycle' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionArrayCycle' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionLongArrayArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionArrayArrayCycle' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionFloatArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionDoubleArrayArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionBooleanArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionyteArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionDoubleArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionIntArrayArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionLongArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionhortArrayArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionObjectArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionObjectCycle' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionBooleanArrayArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testSimpleReflectionObjectCycle' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionByteArrayArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionArrayCycleLevel2' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionArrayAndObjectCycle' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionCharArrayArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionShortArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testSelfInstanceVarReflectionObjectCycle' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionIntArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionCharArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+                 'org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionFloatArrayArray' : [r'^junit.framework.AssertionFailedError: Expected: <null> but was: \[\].*$'],
+        },
+        '41' : { 'org.apache.commons.lang.ClassUtilsTest::test_getShortClassName_Class' : [r'^junit.framework.ComparisonFailure: expected:<String\[\[\]\]> but was:<String\[;\]>.*$'],
+                 'org.apache.commons.lang.ClassUtilsTest::test_getPackageName_Class' : [r'^.+$']
+        },
+        '58' : { 'org.apache.commons.lang.math.NumberUtilsTest::testLang300' : [r'^java.lang.NumberFormatException: 1l is not a valid number\.$'], },
+        '61' : { 'org.apache.commons.lang.text.StrBuilderTest::testIndexOfLang294' : [r'^junit.framework.AssertionFailedError: expected:<-1> but was:<6>.*$'],
+                 'org.apache.commons.lang.text.StrBuilderTest::testLang294' : [r'^java.lang.ArrayIndexOutOfBoundsException.*$'],
+        },
+    },
+    'Math' : {
+        '13' : { 'org.apache.commons.math3.optimization.fitting.PolynomialFitterTest::testLargeSample' : [r'^java.lang.OutOfMemoryError: Java heap space.*$'], },
+        '20' : { 'org.apache.commons.math3.optimization.direct.CMAESOptimizerTest::testMath864' : [r'^junit.framework.AssertionFailedError: Out of bounds.*$'], },
+        '31' : { 'org.apache.commons.math3.distribution.BinomialDistributionTest::testMath718' : [r'^.+$'],
+                 'org.apache.commons.math3.distribution.FDistributionTest::testMath785' : [r'^junit.framework.AssertionFailedError: Failing to calculate inverse cumulative probability.*$'],
+        },
+        '38' : { 'org.apache.commons.math.optimization.direct.BOBYQAOptimizerTest::testConstrainedRosenWithMoreInterpolationPoints' : [r'^.+PathIsExploredException.*$'], },
+        '58' : { 'org.apache.commons.math.optimization.fitting.GaussianFitterTest::testMath519' : [r'^org.apache.commons.math.exception.NotStrictlyPositiveException.*$'], },
+        '65' : { 'org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerTest::testCircleFitting' : [r'^junit.framework.AssertionFailedError: expected:<[0-9.]+>.*$'], },
+        '66' : { 'org.apache.commons.math.optimization.MultiStartUnivariateRealOptimizerTest::testQuinticMin' : [r'^junit.framework.AssertionFailedError: expected:<-0\.2719561270319131> but was:<-0\.[0-9]+>.*$'],
+                 'org.apache.commons.math.optimization.MultiStartUnivariateRealOptimizerTest::testSinMin' : [r'^junit.framework.AssertionFailedError.*$'],
+                 'org.apache.commons.math.optimization.univariate.BrentOptimizerTest::testQuinticMinStatistics' : [r'^junit.framework.AssertionFailedError.*$'],
+                 'org.apache.commons.math.optimization.univariate.BrentOptimizerTest::testSinMin' : [r'^junit.framework.AssertionFailedError: expected:<4\.71238898038469> but was:<4\.[0-9]+>.*$'],
+        },
+        '78' : { 'org.apache.commons.math.ode.events.EventStateTest::closeEvents' : [r'^.+$'] },
+        '83' : { 'org.apache.commons.math.optimization.linear.SimplexSolverTest::testMath286' : [r'^junit.framework.AssertionFailedError: expected:<6\.9> but was:<4\.6000000000000005>.*$'], },
+        '93' : { 'org.apache.commons.math.util.MathUtilsTest::testFactorial' : [r'^junit.framework.AssertionFailedError: 17!  expected:<[0-9.E]+> but was:<[0-9.E]+>.*$'] },
+        '99' : { 'org.apache.commons.math.util.MathUtilsTest::testGcd' : [r'^junit.framework.AssertionFailedError: expecting ArithmeticException.*$'],
+                 'org.apache.commons.math.util.MathUtilsTest::testLcm' : [r'^.+$'],
+        },
+    },
+    'Mockito' : {
+        '17' : { 'org.mockitousage.basicapi.MocksSerializationTest::shouldBeSerializeAndHaveExtraInterfaces' : [r'^java.io.NotSerializableException: org.mockitousage.IMethods\$\$EnhancerByMockitoWithCGLIB\$\$.+.*$'] },
+        '25' : { 'org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::will_return_default_value_on_non_mockable_nested_generic' : [r'^java.lang.ClassCastException: org.mockito.internal.creation.jmock.ClassImposterizer\$ClassWithSuperclassToWorkAroundCglibBug\$\$EnhancerByMockitoWithCGLIB\$\$.+ cannot be cast to java.lang.String.*$'],
+                 'org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::can_create_mock_from_multiple_type_variable_bounds_when_return_type_of_parameterized_method_is_a_typevar_that_is_referencing_a_typevar_on_class' : [r'^java.lang.ClassCastException: \$java.lang.Comparable\$\$EnhancerByMockitoWithCGLIB\$\$.+ cannot be cast to java.lang.Cloneable.*$'],
+                 'org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::can_create_mock_from_return_types_declared_with_a_bounded_wildcard' : [r'^java.lang.ClassCastException: org.mockito.internal.creation.jmock.ClassImposterizer\$ClassWithSuperclassToWorkAroundCglibBug\$\$EnhancerByMockitoWithCGLIB\$\$.+ cannot be cast to java.lang.Number.*$'],
+                 'org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::can_create_mock_from_multiple_type_variable_bounds_when_return_type_of_parameterized_method_is_a_parameterizedtype_that_is_referencing_a_typevar_on_class' : [r'^java.lang.ClassCastException: org.mockito.internal.creation.jmock.ClassImposterizer\$ClassWithSuperclassToWorkAroundCglibBug\$\$EnhancerByMockitoWithCGLIB\$\$.+ cannot be cast to java.lang.Cloneable.*$'],
+                 'org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::generic_deep_mock_frenzy__look_at_these_chained_calls' : [r'^java.lang.ClassCastException: org.mockito.internal.creation.jmock.ClassImposterizer\$ClassWithSuperclassToWorkAroundCglibBug\$\$EnhancerByMockitoWithCGLIB\$\$.+ cannot be cast to java.util.Map\$Entry.*$'],
+                 'org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::can_create_mock_from_multiple_type_variable_bounds_when_method_return_type_is_referencing_a_typevar_on_class' : [r'^java.lang.ClassCastException: \$java.lang.Comparable\$\$EnhancerByMockitoWithCGLIB\$\$.+ cannot be cast to java.lang.Cloneable.*$'],
+        },
+        '26' : { 'org.mockito.internal.progress.HandyReturnValuesTest::should_default_values_for_primitive' : [
+                     r'^java.lang.ClassCastException: java.lang.Integer cannot be cast to (.+).*$'
+                 ],
+                 'org.mockito.internal.stubbing.defaultanswers.ReturnsEmptyValuesTest::should_return_primitive' : [
+                     r'^junit.framework.AssertionFailedError: expected:<.+> but was:<.+>.*$'
+                 ],
+                 'org.mockito.internal.stubbing.defaultanswers.ReturnsMocksTest::should_return_the_usual_default_values_for_primitives' : [
+                     r'^junit.framework.AssertionFailedError: expected:<.+> but was:<.+>.*$',
+                 ],
+                 'org.mockito.internal.stubbing.defaultanswers.ReturnsSmartNullsTest::should_return_the_usual_default_values_for_primitives' : [
+                     r'^junit.framework.AssertionFailedError: expected:<.+> but was:<.+>.*$',
+                 ],
+        },
+        '28' : { 'org.mockitousage.bugs.InjectionByTypeShouldFirstLookForExactTypeThenAncestorTest::mock_should_be_injected_once_and_in_the_best_matching_type' : [r'^junit.framework.AssertionFailedError: expected same:<java.lang.Object@.+> was not:<mockedBean>.*$'] },
+    },
+    'Time' : {
+        '2' : { 'org.joda.time.TestPartial_Basics::testWith_baseAndArgHaveNoRange' : [r'^java.lang.IllegalArgumentException: Types array must not contain duplicate:.*year.*$'] },
+    },
+}
+
+TEST_CMD_FMT = 'timeout %d defects4j test -r -w %%s 2>/dev/null' % TIMEOUT
+PROP_FILE_NAME = 'defects4j.build.properties'
+TRIGGER_PAT = re.compile(r'^d4j\.tests\.trigger=(?P<tests>.+)$')
+FAIL_MARK = 'Failing tests:'
+
+
+def get_other_fails_thresh(proj, bid):
+    t = -1
+    try:
+        t = OTHER_FAILS_THRESH_TBL[proj][bid]
+    except KeyError:
+        pass
+    return t
+
+def get_trigger(wdir):
+    tests = None
+    ppath = os.path.join(wdir, PROP_FILE_NAME)
+    with open(ppath, 'r') as f:
+        for _line in f.readlines():
+            line = _line.strip()
+            m = TRIGGER_PAT.match(line)
+            if m:
+                tests = set(m.group('tests').split(','))
+                break
+
+    return tests
+
+def extract_trigger_tbl(path):
+    tests = []
+    with open(path, 'r') as f:
+        trigger = None
+        lines = []
+        for _line in f.readlines():
+            line = _line.strip()
+            #logger.debug('line=%s' % line)
+
+            m = TRIGGER_TEST_PAT.match(line)
+            if m:
+                trigger = m.group('trigger')
+                #logger.debug('  trigger=%s' % trigger)
+            elif trigger:
+                m = STACK_TRACE_PAT.match(line)
+                if m:
+                    #logger.debug('  stack trace')
+                    tests.append((trigger, lines))
+                    trigger = None
+                    lines = []
+                else:
+                    if line:
+                        lines.append(line)
+
+    return dict(tests)
+
+def get_info(wdir):
+    proj = None
+    bid = None
+    ppath = os.path.join(wdir, PROP_FILE_NAME)
+    with open(ppath, 'r') as f:
+        for _line in f.readlines():
+            line = _line.strip()
+
+            m = PROJ_PAT.match(line)
+            if m:
+                proj = m.group('proj')
+
+            m = BID_PAT.match(line)
+            if m:
+                bid = m.group('bid')
+    return (proj, bid)
+
+def get_trigger_tbl(proj, bid):
+    tbl = extract_trigger_tbl(os.path.join(D4J_PROJ_DIR, proj, 'trigger_tests', bid))
+    return tbl
+
+def get_cause(s):
+    cause = s
+    m = CAUSE_PAT.match(s)
+    if m:
+        cause = m.group('cause')
+    return cause
+
+class CausePatternNotFound(Exception):
+    pass
+
+def match_cause(proj, bid, test, ss):
+    b = True
+    q = deque(ss)
+    try:
+        pats = CAUSE_PAT_TBL[proj][bid][test]
+        for pat in pats:
+            pat = re.compile(pat)
+            m = pat.match(q.popleft())
+            if not m:
+                b = False
+                break
+    except KeyError:
+        raise CausePatternNotFound
+    return b
+
+def test(wdir, interpret=False):
+    triggers = get_trigger(wdir)
+    ntriggers = len(triggers)
+    cmd = TEST_CMD_FMT % wdir
+    out = proc.check_output(cmd)
+
+    logger.debug('triggers:')
+    for t in triggers:
+        logger.debug('  %s' % t)
+    logger.debug('---------------')
+    logger.debug(out)
+    logger.debug('---------------')
+
+    flag = False
+
+    result = 'UNRESOLVED'
+
+    failed_tests = set()
+
+    for _line in out.split('\n'):
+        line = _line.lstrip(' -')
+        if flag:
+            if line:
+                logger.debug('line=%s' % line)
+                failed_tests.add(line)
+
+        if line.startswith(FAIL_MARK):
+            flag = True
+
+    other_fails = len(failed_tests - triggers)
+
+    logger.debug('failed_tests:')
+    for t in failed_tests:
+        logger.debug('  %s' % t)
+    logger.debug('flag=%s other_fails=%d' % (flag, other_fails))
+
+    if flag:
+        if triggers.isdisjoint(failed_tests):
+            result = 'PASS'
+
+        elif triggers <= failed_tests:
+            is_ok = True
+            if interpret:
+                proj, bid = get_info(wdir)
+                other_fails_thresh = get_other_fails_thresh(proj, bid)
+
+                if other_fails_thresh >=0 and other_fails > other_fails_thresh:#False:#other_fails > 0:
+                    is_ok = False
+                else:
+                    trigger_tbl = get_trigger_tbl(proj, bid)
+                    failing_test_tbl = extract_trigger_tbl(os.path.join(wdir, 'failing_tests'))
+
+                    for t in triggers:
+                        if is_ok:
+                            expected = trigger_tbl.get(t, None)
+                            actual = failing_test_tbl.get(t, None)
+
+                            logger.debug('trigger: %s' % t)
+                            logger.debug('  expected: %s' % expected)
+                            logger.debug('  actual  : %s' % actual)
+
+                            if expected and actual:
+                                try:
+                                    if not match_cause(proj, bid, t, actual):
+                                        is_ok = False
+                                except CausePatternNotFound:
+                                    if expected[0] != actual[0]:
+                                        is_ok = False
+            if is_ok:
+                result = 'FAIL'
+
+    sys.stdout.write(result)
+
+
+if __name__ == '__main__':
+    from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+
+    parser = ArgumentParser(description='test script for DD on Defects4J',
+                            formatter_class=ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument('wdir', type=str, help='working directory')
+
+    parser.add_argument('-d', '--debug', dest='debug', action='store_true',
+                        help='enable debug printing')
+
+    args = parser.parse_args()
+
+    log_level = logging.INFO
+    if args.debug:
+        log_level = logging.DEBUG
+    setup_logger(logger, log_level)
+
+    interpret = os.getenv('DD_INTERPRET_TEST_MSG', None) != None
+
+    test(args.wdir, interpret=interpret)

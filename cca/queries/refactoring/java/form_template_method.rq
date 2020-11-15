@@ -1,0 +1,137 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX svn:  <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+
+SELECT DISTINCT 
+?ParentC ?ParentC_ ?templMname_ ?subMname_ ?subM_ ?templM_
+
+(?ParentC AS ?originalParentClass)
+(?ParentC_ AS ?modifiedParentClass)
+(?templM_ AS ?templateMethod)
+(?templMname_ AS ?templateMethodName)
+(?subM_ AS ?subMethod)
+(?subMname_ AS ?GROUP)
+WHERE {
+
+
+  {
+    SELECT DISTINCT ?ver ?ver_ ?subM_ ?ParentC ?ParentC_ ?subMname_ ?templM_ ?templMname_ ?e0
+    WHERE {
+
+      {
+        SELECT DISTINCT ?ver ?ver_ ?subM_ ?ParentC ?ParentC_ ?subMname_
+        WHERE {
+          
+          ?ver ver:next ?ver_ .
+          
+          {
+            SELECT DISTINCT ?subM_ ?ParentC_ ?subMname_ ?e1
+            WHERE {
+              
+              ?subM_ a java:MethodDeclaration ;
+                     java:inClass ?ParentC_ ;
+                     java:name ?subMname_ ;
+                     chg:addition ?e1 .
+
+              ?mods_ a java:Modifiers ;
+                     java:inMethod ?subM_ ;
+                     src:children/rdf:rest*/rdf:first [a java:Abstract] .
+  
+              ?ParentC_ a java:ClassDeclaration .
+            
+
+            } GROUP BY ?subM_ ?ParentC_ ?subMname_ ?e1
+          }
+
+          ?e1 src:parent*/ver:version ?ver .
+
+          ?ParentC_ ver:version ?ver_ .
+
+          {
+            SELECT DISTINCT ?ParentC ?ParentC_
+            WHERE {
+              ?ParentC a java:ClassDeclaration ;
+                       chg:mappedTo ?ParentC_ .
+            } GROUP BY ?ParentC ?ParentC_
+          }
+
+          FILTER EXISTS {
+            ?ParentC ver:version ?ver .
+          }
+
+        } GROUP BY ?ver ?ver_ ?subM_ ?ParentC ?ParentC_ ?subMname_
+      }
+      
+      {
+        SELECT DISTINCT ?subMname_ ?ParentC_ ?templM_ ?templMname_ ?e0
+        WHERE {
+
+          ?ivk_ a java:StandardMethodInvocation ;
+                java:name ?subMname_ ;
+                java:inMethod ?templM_ .
+          
+          ?templM_ a java:MethodDeclaration ;
+                   java:inClass ?ParentC_ ;
+                   java:name ?templMname_ ;
+                   chg:addition ?e0 .
+
+        } GROUP BY ?subMname_ ?ParentC_ ?templM_ ?templMname_ ?e0
+      }
+
+      #?e0 src:parent*/ver:version ?ver .
+
+      #FILTER (?templM_ != ?subM_)
+
+    } GROUP BY ?ver ?ver_ ?subM_ ?ParentC ?ParentC_ ?subMname_ ?templM_ ?templMname_ ?e0
+  }
+
+  FILTER (?templM_ != ?subM_)
+
+  FILTER EXISTS {
+
+     {
+       SELECT DISTINCT ?ver ?ver_ ?ParentC ?ParentC_ ?subMname_ (COUNT(DISTINCT ?ChildC) AS ?nc)
+       WHERE {
+         
+         {
+           SELECT DISTINCT ?subMname_ ?ChildC_ ?ParentC_ ?ParentC ?ChildC
+           WHERE {
+
+             ?subM_ a java:MethodDeclaration ;
+                    java:inClass ?ChildC_ ;
+                    java:name ?subMname_ ;
+                    chg:addition ?e2 .
+             
+             ?ChildC_ a java:ClassDeclaration ;
+                      java:subClassOf ?ParentC_ .
+
+             ?ChildC a java:ClassDeclaration ;
+                     java:subClassOf ?ParentC ;
+                     chg:mappedTo ?ChildC_ .
+             
+           } GROUP BY ?subMname_ ?ChildC_ ?ParentC_ ?ParentC ?ChildC
+         }
+
+         ?e2 src:parent*/ver:version ?ver .
+         ?ChildC_ ver:version ?ver_ .
+         ?ChildC ver:version ?ver .
+
+       } GROUP BY ?ver ?ver_ ?ParentC ?ParentC_ ?subMname_
+     }
+    
+    FILTER (?nc > 1)
+    
+  }
+  
+
+}

@@ -1,0 +1,58 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX ext:  <http://codinuum.com/fact/external/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+
+SELECT DISTINCT ?ctor ?ctor_ ?cname
+(?class AS ?originalClass)
+(?class_ AS ?modifiedClass)
+(?ctor AS ?originalCtor)
+(?ctor_ AS ?modifiedCtor)
+(?cname AS ?className)
+(?cname AS ?GROUP)
+WHERE {
+
+  {
+    SELECT DISTINCT ?class ?class_ ?cname ?ctor ?ctor_
+    WHERE {
+
+      ?class a java:ClassDeclaration ;
+             java:name ?cname ;
+             chg:mappedTo ?class_ .
+
+      ?class_ a java:ClassDeclaration .
+
+      ?ctor a java:ConstructorDeclaration ;
+            java:inClass ?class ;
+            chg:mappedTo ?ctor_ .
+
+      ?ctor_ a java:ConstructorDeclaration ;
+             java:inClass ?class_ .
+
+    } GROUP BY ?class ?class_ ?cname ?ctor ?ctor_
+  }
+
+  FILTER NOT EXISTS { 
+    [] a java:SuperInvocation ;
+       java:inConstructor ?ctor .
+  }
+
+  FILTER EXISTS {
+    [] a java:SuperInvocation ;
+       java:inConstructor ?ctor_ .
+  }
+
+  FILTER EXISTS {
+    [] a java:Extends ;
+       java:inClass ?class .
+  }
+
+}

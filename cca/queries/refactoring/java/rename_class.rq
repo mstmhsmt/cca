@@ -1,0 +1,140 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX svn:  <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX ccfx: <http://codinuum.com/ontologies/2015/02/ccfx#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+SELECT DISTINCT ?class ?class_ ?cfqn ?cfqn_
+(?class AS ?originalClass)
+(?class_ AS ?modifiedClass)
+(?cfqn AS ?originalClassName)
+(?cfqn_ AS ?modifiedClassName)
+(?cfqn AS ?GROUP)
+WHERE {
+
+  {
+
+    {
+      SELECT DISTINCT ?file ?file_ ?class ?class_ ?cfqn ?cfqn_
+      WHERE {
+
+        ?class a java:TypeDeclaration ;
+               java:fullyQualifiedName ?cfqn ;
+               src:inFile ?file .
+
+        ?class chg:mappedTo ?class_ .
+
+        ?class_ a java:TypeDeclaration ;
+                java:fullyQualifiedName ?cfqn_ ;
+                src:inFile ?file_ .
+
+      } GROUP BY ?file ?file_ ?class ?class_ ?cfqn ?cfqn_
+    }
+
+    ?class ver:version ?ver .
+    ?class_ ver:version ?ver_ .
+    ?ver ver:next ?ver_ .
+
+    FILTER (?cfqn != ?cfqn_)
+
+  }
+  UNION
+  {
+
+    {
+      SELECT DISTINCT ?class ?class_ ?cfqn ?cfqn_ ?x ?x_
+      WHERE {
+        ?class a java:TypeDeclaration ;
+               java:fullyQualifiedName ?cfqn .
+
+        ?x a java:MethodOrConstructor ;
+           java:inTypeDeclaration ?class .
+
+        ?x_ a java:MethodOrConstructor ;
+            java:inTypeDeclaration ?class_ .
+
+        ?a src:alignedWith ?x .
+        ?a_ src:alignedWith ?x_ .
+
+        ?a ccfx:similarTo ?a_ .
+
+        ?class_ a java:TypeDeclaration ;
+                java:fullyQualifiedName ?cfqn_ .
+
+        FILTER (?cfqn != ?cfqn_)
+        
+        FILTER NOT EXISTS {
+          [] chg:mappedTo ?class_ .
+        }
+
+        FILTER EXISTS {
+          ?class_ chg:graftedOnto [] .
+        }
+
+        FILTER EXISTS {
+          ?x java:name ?xn .
+          ?x_ java:name ?xn .
+        }
+
+        FILTER NOT EXISTS {
+          ?class chg:mappedTo ?c_ .
+          {
+            ?class_ java:subClassOf+ ?c_ .
+          }
+          UNION
+          {
+            ?c_ java:subClassOf+ ?class_ .
+          }
+        }
+
+      } GROUP BY ?class ?class_ ?cfqn ?cfqn_ ?x ?x_
+    }
+
+    ?class ver:version ?ver .
+    ?class_ ver:version ?ver_ .
+    ?ver ver:next ?ver_ .
+
+    FILTER (NOT EXISTS {
+      [] a java:InstanceCreation ;
+         java:name ?cfqn .
+
+      [] a java:InstanceCreation ;
+         java:name ?cfqn_ .
+    } || EXISTS {
+      ?new a java:InstanceCreation ;
+           java:name ?cfqn ;
+           chg:mappedTo ?new_ .
+
+      ?new_ a java:InstanceCreation ;
+            java:name ?cfqn_ .
+    })
+
+  }
+
+  FILTER EXISTS {
+    ?cu a java:CompilationUnit ;
+        src:inFile ?file .
+
+    ?cu_ a java:CompilationUnit ;
+         src:inFile ?file_ .
+
+    ?pdecl a java:PackageDeclaration ;
+           src:parent+ ?cu ;
+           java:name ?pname .
+
+    ?pdecl_ a java:PackageDeclaration ;
+            src:parent+ ?cu_ ;
+            java:name ?pname_ .
+    FILTER (?pname = ?pname_)
+  }
+
+}
+

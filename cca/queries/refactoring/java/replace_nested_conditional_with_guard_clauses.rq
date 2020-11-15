@@ -1,0 +1,45 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX ext:  <http://codinuum.com/fact/external/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+
+SELECT DISTINCT ?if0 ?if_ ?mname
+(?if0 AS ?removedIf)
+(?if_ AS ?addedIf)
+(?meth AS ?originalMethod)
+(?meth_ AS ?modifiedMethod)
+(?mname AS ?methodName)
+(?mname AS ?GROUP)
+WHERE {
+
+  ?if0 a java:IfStatement ;
+       java:inMethod ?meth ;
+       chg:removal ?e0_ .
+
+  ?meth a java:MethodDeclaration ;
+        java:name ?mname ;
+        chg:mappedTo ?meth_ .
+
+  ?meth_ a java:MethodDeclaration .
+
+  ?if1 java:elsePartOf ?if0 ;
+       a java:IfStatement ;
+       chg:removal ?e1_ .
+
+  ?if_ a java:IfStatement ;
+       java:inMethod ?meth_ ;
+       chg:addition ?e2 .
+
+  ?then_ java:thenPartOf ?if_ ;
+         a java:ReturnStatement .
+
+
+}

@@ -1,0 +1,143 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX svn:  <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+PREFIX clone: <http://codinuum.com/ontologies/2013/01/clone#>
+
+
+SELECT DISTINCT
+?meth ?meth_ ?e1 ?e0_ ?msig ?mname ?cname0 ?cname1_
+(?class0 AS ?fromClass)
+(?class1_ AS ?toClass)
+(?cname0 AS ?fromClassName)
+(?cname1_ AS ?toClassName)
+(?e1 AS ?context)
+(?e0_ AS ?context_)
+(?meth AS ?originalMethod)
+(?meth_ AS ?movedMethod)
+(?mname AS ?methodName)
+(?msig AS ?signature)
+(?mname AS ?GROUP)
+WHERE {
+
+
+  {
+    SELECT DISTINCT ?ver ?ver_ ?meth ?meth_ ?class0 ?class1_ ?msig ?mname ?e0_ ?e1 ?cname0 ?cname1_
+    WHERE {
+
+      ?ver ver:next ?ver_ .
+
+      {
+        SELECT DISTINCT ?ver_ ?meth ?class0 ?msig ?mname ?e0_
+        WHERE {
+
+          ?meth a java:MethodDeclaration ;
+                java:inClass ?class0 ;
+                java:signature ?msig ;
+                java:name ?mname ;
+                chg:deletedOrPruned ?e0_ .
+
+          ?e0_ src:parent*/ver:version ?ver_ .
+
+        } GROUP BY ?ver_ ?meth ?class0 ?msig ?mname ?e0_
+      }
+
+      {
+        SELECT DISTINCT ?ver ?class0 ?cname0
+        WHERE {
+          ?class0 a java:ClassDeclaration ;
+                  java:fullyQualifiedName ?cname0 ;
+                  ver:version ?ver .
+        } GROUP BY ?ver ?class0 ?cname0
+      }
+
+      {
+        SELECT DISTINCT ?ver ?meth_ ?class1_ ?msig ?mname ?e1
+        WHERE {
+
+          ?meth_ a java:MethodDeclaration ;
+                 java:inClass ?class1_ ;
+                 java:signature ?msig ;
+                 java:name ?mname ;
+                 chg:insertedOrGrafted ?e1 .
+
+          ?e1 src:parent*/ver:version ?ver .
+
+        } GROUP BY ?ver ?meth_ ?class1_ ?msig ?mname ?e1
+      }
+
+      {
+        SELECT DISTINCT ?ver_ ?class1_ ?cname1_
+        WHERE {
+
+          ?class1_ a java:ClassDeclaration ;
+                   java:fullyQualifiedName ?cname1_ ;
+                   ver:version ?ver_ .
+
+        } GROUP BY ?ver_ ?class1_ ?cname1_
+      }
+
+      FILTER NOT EXISTS { ?class0 chg:mappedTo ?class1_ }
+
+    } GROUP BY ?ver ?ver_ ?meth ?meth_ ?class0 ?class1_ ?msig ?mname ?e0_ ?e1 ?cname0 ?cname1_
+  }
+
+  FILTER EXISTS {
+      ?ent0 a java:Entity ;
+            java:name [] ;
+            src:treeDigest ?d0 ;
+            java:inMethodOrConstructor ?meth .
+
+      ?ent0_ a java:Entity ;
+             java:name [] ;
+             src:treeDigest ?d0 ;
+             java:inMethodOrConstructor ?meth_ .
+
+      ?meth java:inTypeDeclaration/ver:version ?ver .
+      ?meth_ java:inTypeDeclaration/ver:version ?ver_ .
+  }
+
+  FILTER (
+          EXISTS {
+            ?class0 chg:mappedTo ?class0_ .
+            ?class1 chg:mappedTo ?class1_ .
+
+            FILTER (?class0_ != ?class1_)
+
+            ?e0_ a java:ClassBody ;
+                 src:parent ?class0_ .
+            ?class0_ ver:version ?ver_ .
+            
+            ?e1 a java:ClassBody ;
+                src:parent ?class1 .
+            ?class1 ver:version ?ver .
+          } ||
+          EXISTS {
+            { 
+              ?class0 chg:mappedTo ?class0_ .
+              ?class0_ ver:version ?ver_ .
+              ?e0_ a java:ClassBody ;
+                   src:parent ?class0_ .
+            }
+            UNION
+            { 
+              ?class1 chg:mappedTo ?class1_ .
+              ?class1 ver:version ?ver .
+              ?e1 a java:ClassBody ;
+                  src:parent ?class1 .
+            }
+            # ?a src:alignedWith ?meth ;
+            #    clone:similarTo ?a_ .
+            # ?a_ src:alignedWith ?meth_ .
+          }
+          )
+
+}

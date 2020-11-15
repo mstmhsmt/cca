@@ -1,0 +1,134 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:      <http://codinuum.com/fb/>
+PREFIX ent:     <http://codinuum.com/fact/entity/>
+PREFIX variant: <http://codinuum.com/fact/version/variant/>
+PREFIX rel:     <http://codinuum.com/fact/version/release/>
+PREFIX svn:     <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:     <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:     <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:     <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX f:       <http://codinuum.com/ontologies/2013/05/fortran-entity#>
+PREFIX java:    <http://codinuum.com/ontologies/2012/10/java-entity#>
+
+SELECT DISTINCT ?ftyname ?fname
+?vdtor ?vdtor_ ?ctx ?ctx_ ?cname ?cname_ ?mods ?mods_
+(?class AS ?fromClass)
+(?class_ AS ?toClass)
+(?ctx AS ?originalContext)
+(?ctx_ AS ?modifiedContext)
+(?vdtor AS ?originalField)
+(?vdtor_ AS ?movedField)
+(?fname AS ?fieldName)
+(?ftyname AS ?fieldTypeName)
+(?mods AS ?fromModifiers)
+(?mods_ AS ?toModifiers)
+(?cname AS ?fromClassName)
+(?cname_ AS ?toClassName)
+(?cname AS ?GROUP)
+WHERE {
+
+  {
+    SELECT DISTINCT ?fname ?vdtor ?vdtor_ ?field ?field_ ?class ?class_ ?fty ?fty_
+    WHERE {
+
+      ?vdtor a java:VariableDeclarator ;
+             src:parent ?field ;
+             java:name ?fname ;
+             chg:mappedTo ?vdtor_ .
+
+      ?vdtor_ a java:VariableDeclarator ;
+              src:parent ?field_ ;
+              java:name ?fname .
+
+      ?field a java:FieldDeclaration ;
+             src:child1 ?fty ;
+             java:inTypeDeclaration ?class ;
+             chg:mappedTo ?field_ .
+
+      ?field_ a java:FieldDeclaration ;
+              src:child1 ?fty_ ;
+              java:inTypeDeclaration ?class_ .
+
+      FILTER NOT EXISTS {
+        ?class chg:mappedTo ?class_ .
+      }
+    } GROUP BY ?fname ?vdtor ?vdtor_ ?field ?field_ ?class ?class_ ?fty ?fty_
+  }
+
+  ?class ver:version ?ver .
+  ?ver ver:next ?ver_ .
+  ?class_ ver:version ?ver_ .
+
+  OPTIONAL {
+    {
+      ?fty a java:ReferenceType ;
+           java:name ?ftyname .
+    } UNION {
+      ?fty a java:PrimitiveType ;
+           a ?t OPTION (INFERENCE NONE) .
+      GRAPH <http://codinuum.com/ont/cpi> {
+        ?t rdfs:label ?ftyname .
+      }
+    }
+  }
+
+  OPTIONAL {
+    {
+      ?fty_ a java:ReferenceType ;
+            java:name ?ftyname_ .
+    } UNION {
+      ?fty_ a java:PrimitiveType ;
+            a ?t_ OPTION (INFERENCE NONE) .
+      GRAPH <http://codinuum.com/ont/cpi> {
+        ?t_ rdfs:label ?ftyname_ .
+      }
+    }
+  }
+
+  FILTER (STR(?ftyname) = STR(?ftyname))
+
+  ?field src:parent ?ctx .
+  ?field_ src:parent ?ctx_ .
+
+  ?class java:name ?cname ;
+         java:fullyQualifiedName ?cfqn .
+  ?class_ java:name ?cname_ ;
+          java:fullyQualifiedName ?cfqn_ .
+
+  OPTIONAL {
+    SELECT DISTINCT ?class ?field (GROUP_CONCAT(DISTINCT ?mlab; SEPARATOR=";") AS ?mods)
+    WHERE {
+      ?field a java:FieldDeclaration ;
+             java:inTypeDeclaration ?class ;
+             src:child0 ?ms .
+      ?ms a java:Modifiers .
+      ?mod a java:Modifier ;
+           a ?mcat OPTION (INFERENCE NONE) ;
+           src:parent ?ms .
+
+      GRAPH <http://codinuum.com/ont/cpi> {
+        ?mcat rdfs:label ?mlab .
+      }
+    } GROUP BY ?class ?field
+  }
+
+  OPTIONAL {
+    SELECT DISTINCT ?class_ ?field_ (GROUP_CONCAT(DISTINCT ?mlab_; SEPARATOR=";") AS ?mods_)
+    WHERE {
+      ?field_ a java:FieldDeclaration ;
+              java:inTypeDeclaration ?class_ ;
+              src:child0 ?ms_ .
+      ?ms_ a java:Modifiers .
+      ?mod_ a java:Modifier ;
+            a ?mcat_ OPTION (INFERENCE NONE) ;
+            src:parent ?ms_ .
+
+      GRAPH <http://codinuum.com/ont/cpi> {
+        ?mcat_ rdfs:label ?mlab_ .
+      }
+    } GROUP BY ?class_ ?field_
+  }
+
+}

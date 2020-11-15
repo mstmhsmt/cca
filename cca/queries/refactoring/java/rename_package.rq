@@ -1,0 +1,45 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX svn:  <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX ccfx: <http://codinuum.com/ontologies/2015/02/ccfx#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+SELECT DISTINCT ?pdecl ?pdecl_ ?pname ?pname_
+(?pdecl AS ?originalPackage)
+(?pdecl_ AS ?modifiedPackage)
+(?pname AS ?originalPackageName)
+(?pname_ AS ?modifiedPackageName)
+(?pname AS ?GROUP)
+WHERE {
+
+  ?pdecl a java:PackageDeclaration ;
+         src:parent ?cu ;
+         java:name ?pname ;
+         chg:relabeled ?pdecl_ .
+
+  ?pdecl_ a java:PackageDeclaration ;
+          src:parent ?cu_ ;
+          java:name ?pname_ .
+
+  ?cu a java:CompilationUnit ;
+      src:inFile ?file ;
+      chg:mappedTo ?cu_ .
+
+  ?cu_ a java:CompilationUnit ;
+       src:inFile ?file_ .
+
+  # ?file a src:File ;
+  #       chg:mappedTo ?file_ .
+
+  # ?file_ a src:File .
+
+}
+

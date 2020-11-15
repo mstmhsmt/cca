@@ -1,0 +1,142 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX ext:  <http://codinuum.com/fact/external/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+# ?class_ -- null class
+
+SELECT DISTINCT 
+?eq ?e1_ ?class_ ?cname_ ?class0_ ?if ?null_class_
+
+(?eq AS ?equation)
+(?e1_ AS ?modifiedContext)
+(?null_class_ AS ?introducedNullClass)
+(?class0_ AS ?originalClass)
+(?cname_ AS ?className)
+(?cname_ AS ?GROUP)
+WHERE {
+
+
+  {
+    SELECT DISTINCT ?eq ?e1_ ?class_ ?if ?class0 ?meth ?class ?src ?src_ ?ver ?ver_
+    WHERE {
+
+      {
+        SELECT DISTINCT ?eq ?e1_ ?class_ ?if ?class0 ?meth ?class
+        WHERE {
+
+          ?null a java:NullLiteral ;
+                src:parent ?eq .
+
+          ?v a java:Name ;
+             src:parent ?eq ;
+             java:ofReferenceType ?class0 .
+
+          ?eq a java:EqualityOp ;
+              java:inMethod ?meth ;
+              java:conditionOf ?if .
+
+          ?if a java:IfStatement ;
+              java:inMethod ?meth ;
+              chg:removal ?e1_ .
+
+          ?meth a java:MethodDeclaration ;
+                java:inClass ?class .
+
+          ?class chg:mappedTo ?class_ .
+
+        } GROUP BY ?eq ?e1_ ?class_ ?if ?class0 ?meth ?class
+      }
+
+      {
+        SELECT DISTINCT ?src ?class
+        WHERE {
+
+          ?class a java:ClassDeclaration ;
+                 src:inSourceTree ?src .
+
+          ?src a src:SourceTree .
+
+        } GROUP BY ?src ?class
+      }
+
+      {
+        SELECT DISTINCT ?src_ ?class_
+        WHERE {
+
+          ?class_ a java:ClassDeclaration ;
+                  src:inSourceTree ?src_ .
+
+          ?src_ a src:SourceTree .
+
+        } GROUP BY ?src_ ?class_
+      }
+
+      FILTER (?src != ?src_)
+
+      ?src ver:version ?ver .
+      ?src_ ver:version ?ver_ .
+
+      ?ver ver:next ?ver_ .
+
+    } GROUP BY ?eq ?e1_ ?class_ ?if ?class0 ?meth ?class ?src ?src_ ?ver ?ver_
+  }
+
+  ?e1_ src:parent*/ver:version ?ver_ .
+
+  OPTIONAL {
+    SELECT DISTINCT ?src ?src_ ?class0 ?class0_
+    WHERE {
+
+      ?class0 a java:ClassDeclaration ;
+              src:inSourceTree ?src ;
+              java:fullyQualifiedName ?cname0 ;
+              chg:mappedTo ?class0_ .
+
+      ?class0_ a java:ClassDeclaration ;
+               java:fullyQualifiedName ?pname_ ;
+               src:inSourceTree ?src_ ;
+               java:fullyQualifiedName ?cname0_ .
+
+    } GROUP BY ?src ?src_ ?class0 ?class0_
+  }
+
+  OPTIONAL {
+    SELECT DISTINCT ?meth ?if ?mname
+    WHERE {
+      
+      ?invoke a java:MethodInvocation ;
+              java:inMethod ?meth ;
+              src:parent+ ?if ;
+              java:name ?mname .
+      
+    } GROUP BY ?meth ?if ?mname
+  }
+  
+  {  
+    SELECT DISTINCT ?mname ?null_class_ ?cname_ ?src_ ?class0_
+    WHERE {
+
+      ?null_meth_ a java:MethodDeclaration ;
+                  java:inClass ?null_class_ ;
+                  java:name ?mname .
+
+      ?null_class_ a java:ClassDeclaration ;
+                   java:subClassOf ?class0_ ;
+                   src:inSourceTree ?src_ ;
+                   java:fullyQualifiedName ?cname_ ;
+                   chg:insertedOrGrafted ?e0 .
+
+    } GROUP BY ?mname ?null_class_ ?cname_ ?src_ ?class0_
+  }
+
+
+}

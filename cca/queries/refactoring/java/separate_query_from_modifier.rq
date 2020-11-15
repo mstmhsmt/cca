@@ -1,0 +1,176 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX ext:  <http://codinuum.com/fact/external/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+
+SELECT DISTINCT
+?meth0 ?meth1_ ?meth2_ ?mname0 ?mname1_ ?mname2_
+(?meth1_ AS ?addedMethod1)
+(?meth2_ AS ?addedMethod2)
+(?mname1_ AS ?addedMethodName1)
+(?mname1_ AS ?addedMethodName2)
+(?meth0 AS ?originalMethod)
+(?mname0 AS ?methodName)
+(?mname0 AS ?GROUP)
+WHERE {
+
+
+  {
+    SELECT DISTINCT ?ver ?ver_ ?meth0 ?mname0 ?meth1_ ?meth2_ ?mname1_ ?mname2_ ?fname0_
+    WHERE {
+
+      {
+        SELECT DISTINCT ?ver ?ver_ ?meth0 ?mname0  ?meth1_ ?mname1_ ?fname0_ ?class0_
+        WHERE {
+
+          {
+            SELECT DISTINCT ?ver ?ver_ ?meth0 ?mname0 ?class0 ?class0_ ?field0 ?field0_ ?facc1_
+            WHERE {
+
+              {
+                SELECT DISTINCT ?ver ?ver_ ?meth0 ?mname0 ?class0 ?class0_ 
+                WHERE {
+
+                  {
+                    SELECT DISTINCT ?meth0 ?mname0 ?class0 ?class0_ ?e0_
+                    WHERE {
+
+                      ?meth0 a java:MethodDeclaration ;
+                             java:inClass ?class0 ;
+                             java:fullyQualifiedName ?mname0 ;
+                             chg:removal ?e0_ .
+
+                      ?class0 a java:ClassDeclaration ;
+                              chg:mappedTo ?class0_ .
+
+                      ?class0_ a java:ClassDeclaration .
+
+                    } GROUP BY ?meth0 ?mname0 ?class0 ?class0_ ?e0_
+                  }
+
+                  ?e0_ src:parent*/ver:version ?ver_ .
+                  ?class0 ver:version ?ver .
+                  ?class0_ ver:version ?ver_ .
+
+                  ?ver ver:next ?ver_ .
+
+                } GROUP BY ?ver ?ver_ ?meth0 ?mname0 ?class0 ?class0_ 
+              }
+
+              ?facc0 a java:FieldAccess ;
+                     java:inMethod ?meth0 ;
+                     java:name ?fname0 ;
+                     chg:mappedTo ?facc1_ .
+
+              FILTER EXISTS {
+                ?meth0 src:child2 ?ty0 .
+
+                ?ty0 a ?no_void0 ;
+                     src:parent ?meth0 .
+
+                FILTER (?no_void0 IN (java:PrimitiveType, java:ReferenceType))
+              }
+
+              {
+                SELECT DISTINCT ?dtor0 ?field0 ?fname0 ?dtor0_ ?field0_ ?fname0_
+                WHERE {
+                  
+                  ?dtor0 a java:VariableDeclarator ;
+                         java:inField ?field0 ;
+                         java:name ?fname0 ;
+                         chg:mappedTo ?dtor0_ .
+
+                  ?dtor0_ a java:VariableDeclarator ;
+                          java:inField ?field0_ ;
+                          java:name ?fname0_ .
+
+                } GROUP BY ?dtor0 ?field0 ?fname0 ?dtor0_ ?field0_ ?fname0_
+              }
+
+              FILTER EXISTS {
+                ?field0 a java:FieldDeclaration ;
+                        java:inClass ?class0 ;
+                        chg:mappedTo ?field0_ .
+
+                ?field0_ a java:FieldDeclaration ;
+                         java:inClass ?class0_ .
+              }
+
+            } GROUP BY ?ver ?ver_ ?meth0 ?mname0 ?class0 ?class0_ ?field0 ?field0_ ?fname0 ?fname0_ ?facc1_
+          }
+
+          {
+            SELECT DISTINCT ?meth1_ ?class0_ ?mname1_ ?e1
+            WHERE {
+              ?ty1_ a java:Void ;
+                    src:parent ?meth1_ .
+
+              ?meth1_ a java:MethodDeclaration ;
+                      java:inClass ?class0_ ;
+                      java:fullyQualifiedName ?mname1_ ;
+                      src:child2 ?ty1_ ;
+                      chg:addition ?e1 .
+
+            } GROUP BY ?meth1_ ?class0_ ?mname1_ ?e1
+          }
+
+          #?e1 src:parent*/ver:version ?ver .
+
+          ?facc1_ a java:FieldAccess ;
+                  java:inMethod ?meth1_ ;
+                  java:name ?fname0_ .
+
+        } GROUP BY ?ver ?ver_ ?meth0 ?mname0 ?meth1_ ?mname1_ ?fname0_ ?class0_
+      }
+
+      {
+        SELECT DISTINCT ?meth2_ ?class0_ ?mname2_ ?e2
+        WHERE {
+
+          ?ty2_ a ?no_void1 ;
+                src:parent ?meth2_ .
+
+          FILTER (?no_void1 IN (java:PrimitiveType, java:ReferenceType))
+
+          ?meth2_ a java:MethodDeclaration ;
+                  java:inClass ?class0_ ;
+                  java:fullyQualifiedName ?mname2_ ;
+                  src:child2 ?ty2_ ;
+                  chg:addition ?e2 .
+
+        } GROUP BY ?meth2_ ?class0_ ?mname2_ ?e2
+      }
+
+      #?e2 src:parent*/ver:version ?ver .
+
+
+    } GROUP BY ?ver ?ver_ ?meth0 ?mname0 ?meth1_ ?meth2_ ?mname1_ ?mname2_ ?fname0_
+  }
+
+  OPTIONAL {
+    ?facc2_ a java:FieldAccess ;
+            java:inMethod ?meth2_ ;
+            java:name ?fname0_ .
+  }
+  FILTER (!BOUND(?facc2))
+
+  FILTER EXISTS {
+    ?ent1 a java:BlockStatement ;
+          java:inMethod ?meth0 ;
+          chg:mappedTo ?ent1_ .
+
+    ?ent1_ a java:BlockStatement ;
+           java:inMethod ?meth2_ .
+  }
+
+
+}

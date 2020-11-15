@@ -1,0 +1,111 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX svn:  <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+
+SELECT DISTINCT
+?e1 ?meth_ ?msig ?cname1_ 
+?meth ?e0_ ?cname0 ?mname ?mname_
+(?mname AS ?methodName)
+(?mname_ AS ?modifiedMethodName)
+(?class0 AS ?originalClass)
+(?class0_ AS ?modifiedClass)
+(?class1_ AS ?superclass)
+(?meth AS ?originalMethod) (?meth_ AS ?movedMethod)
+(?e1 AS ?originalContext) (?e0_ AS ?modifiedContext)
+(?msig AS ?signature)
+(?cname0 AS ?className)
+(?cname1_ AS ?superclassName)
+(?cname1_ AS ?GROUP)
+WHERE {
+
+  {
+    SELECT DISTINCT ?ver ?ver_ ?meth ?class0 ?msig ?mname ?e0_ ?class0_
+    ?class1_ ?meth_ ?msig_ ?mname_
+    WHERE {
+
+      {
+        SELECT DISTINCT ?ver ?ver_ ?meth ?class0 ?msig ?mname ?e0_ ?class0_
+        WHERE {
+
+          {
+            SELECT DISTINCT ?meth ?class0 ?msig ?mname ?e0_
+            WHERE {
+
+              ?meth a java:MethodDeclaration ;
+                    java:inClass ?class0 ;
+                    java:signature ?msig ;
+                    java:name ?mname .
+              {
+                ?meth chg:removal ?e0_ .
+              }
+              UNION
+              {
+                ?meth chg:relabeled ?e0_ .
+                ?e0_ java:name ?mn_ .
+                FILTER (?mn_ != ?mname)
+              }
+            } GROUP BY ?meth ?class0 ?msig ?mname ?e0_
+          }
+          ?class0 ver:version ?ver .
+          ?ver ver:next ?ver_ .  
+          FILTER EXISTS {
+            ?e0_ src:parent*/ver:version ?ver_ .
+          }
+
+          ?class0 chg:mappedTo ?class0_ .
+
+          FILTER NOT EXISTS {
+            [] a java:MethodDeclaration ;
+               java:inClass ?class0_ ;
+               src:child5 [] ;
+               java:signature ?msig ;
+               java:name ?mname .
+          }
+
+        } GROUP BY ?ver ?ver_ ?meth ?class0 ?msig ?mname ?e0_ ?class0_
+      }
+
+      ?class0_ java:subTypeOf+ ?class1_ .
+
+      ?meth_ a java:MethodDeclaration ;
+             java:inClass ?class1_ ;
+             java:signature ?msig_ ;
+             java:name ?mname_ .
+
+      FILTER (?mname != ?mname_)
+
+      FILTER EXISTS {
+        [] java:mayInvokeMethod ?meth ;
+           chg:mappedTo/java:mayInvokeMethod ?meth_ .
+      }
+      FILTER EXISTS {
+        ?class1_ ver:version ?ver_ .
+      }
+
+      FILTER NOT EXISTS { ?class0 chg:mappedTo ?class1_ }
+
+    } GROUP BY ?ver ?ver_ ?meth ?class0 ?msig ?mname ?e0_ ?class0_
+    ?class1_ ?meth_ ?msig_ ?mname_
+  }
+
+  ?meth_ chg:addition|^chg:relabeled ?e1 .
+
+  FILTER EXISTS {
+    ?e1 src:parent*/ver:version ?ver .
+  }
+
+  ?class0 java:fullyQualifiedName ?cname0 .
+  ?class1_ java:fullyQualifiedName ?cname1_ .
+
+}
+

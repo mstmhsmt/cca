@@ -49,7 +49,7 @@ INSERT_PAT = re.compile(r'insert', re.I)
 
 class Materializer(object):
     def __init__(self, qdir, queries, proj_id,
-                 method='odbc', pw=VIRTUOSO_PW, port=DEFAULT_PORT):
+                 method='odbc', pw=VIRTUOSO_PW, port=DEFAULT_PORT, conf=None):
         self._query_dir = qdir
         self._queries = queries
         self._proj_id = proj_id
@@ -57,10 +57,10 @@ class Materializer(object):
         self._sparql = sparql.get_driver(method, pw=pw, port=port)
         self._port = port
         self._pw = pw
-        try:
+        if conf == None:
             self._conf = project.get_conf(proj_id)
-        except:
-            self._conf = None
+        else:
+            self._conf = conf
 
 
     def make_ver_next_triples(self):

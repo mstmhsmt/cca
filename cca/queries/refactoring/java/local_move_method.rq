@@ -1,0 +1,66 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX svn:  <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+PREFIX clone: <http://codinuum.com/ontologies/2013/01/clone#>
+
+
+SELECT DISTINCT
+?meth ?meth_ ?msig ?mname ?cname ?cname_
+(?class AS ?fromClass)
+(?class_ AS ?toClass)
+(?cname AS ?fromClassName)
+(?cname_ AS ?toClassName)
+(?meth AS ?originalMethod)
+(?meth_ AS ?movedMethod)
+(?mname AS ?methodName)
+(?msig AS ?signature)
+(?mname AS ?GROUP)
+WHERE {
+
+  ?meth a java:MethodDeclaration ;
+        java:inClass ?class ;
+        java:signature ?msig ;
+        java:name ?mname .
+
+  ?meth chg:mappedTo ?meth_ .
+
+
+  ?meth_ a java:MethodDeclaration ;
+         java:inClass ?class_ ;
+         java:signature ?msig_ ;
+         java:name ?mname_ .
+
+  ?class ver:version ?ver .
+  ?ver ver:next ?ver_ .
+  FILTER EXISTS {
+    ?class_ ver:version ?ver_ .
+  }
+
+  FILTER (?mname = ?mname_)
+
+  FILTER EXISTS {
+    [] a java:MethodBody ;
+       src:parent ?meth ;
+       chg:mappedTo [ a java:MethodBody ;
+                      src:parent ?meth_ ] .
+  }
+
+  FILTER NOT EXISTS {
+    ?class chg:mappedTo ?class_ .
+  }
+
+  ?class java:fullyQualifiedName ?cname .
+  ?class_ java:fullyQualifiedName ?cname_ .
+
+  FILTER (?cname != ?cname_)
+
+}

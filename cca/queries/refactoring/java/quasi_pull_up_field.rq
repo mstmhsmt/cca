@@ -1,0 +1,121 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX ext:  <http://codinuum.com/fact/external/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+
+SELECT DISTINCT
+?vdtor0x ?vdtor0_ ?e1 ?e0x_ ?fname0 ?cname1 ?cname0_
+(?vdtor0x AS ?originalField) (?vdtor0_ AS ?movedField)
+(?e1 AS ?originalContext) (?e0x_ AS ?modifiedContext)
+(?class0_ AS ?superclass)
+(?class1x AS ?originalClass)
+(?class1x_ AS ?modifiedClass)
+(?fname0 AS ?fieldName)
+(?cname1 AS ?className)
+(?cname0_ AS ?superclassName)
+(?cname0_ AS ?GROUP)
+WHERE {
+
+  {
+    SELECT DISTINCT ?class0_ ?vdtor0_ ?cname0_ ?e1 ?fname0
+    (COUNT(DISTINCT ?class1) AS ?n)
+    ?ver ?ver_
+    WHERE {
+
+      {
+        SELECT DISTINCT ?field0 ?fname0 ?vdtor0 ?e0_ ?class1 ?class1_ ?cname1
+        WHERE {
+
+          ?vdtor0 a java:VariableDeclarator ;
+                  src:parent ?field0 ;
+                  java:name ?fname0 ;
+                  chg:removal ?e0_ .
+
+          ?field0 a java:FieldDeclaration ;
+                  java:inTypeDeclaration ?class1 .
+
+          ?class1 a java:TypeDeclaration ;
+                  java:name ?cname1 ;
+                  chg:mappedTo ?class1_ .
+
+          ?class1_ a java:TypeDeclaration .
+
+        } GROUP BY ?field0 ?fname0 ?vdtor0 ?e0_ ?class1 ?class1_ ?cname1
+      }
+
+      {
+        SELECT DISTINCT ?class0_ ?field0_ ?vdtor0_ ?fname0 ?e1 ?cname0_
+        WHERE {
+
+          ?vdtor0_ a java:VariableDeclarator ;
+                   src:parent ?field0_ ;
+                   java:name ?fname0 ;
+                   chg:addition ?e1 .
+
+          ?field0_ a java:FieldDeclaration ;
+                   java:inTypeDeclaration ?class0_ .
+
+          ?class0_ a java:TypeDeclaration ;
+                   java:name ?cname0_ .
+
+        } GROUP BY ?class0_ ?field0_ ?vdtor0_ ?fname0 ?e1 ?cname0_
+      }
+
+      ?class1_ java:subTypeOf+ ?class0_ .
+
+      ?class1 ver:version ?ver .
+      ?class1_ ver:version ?ver_ .
+
+      ?class0_ ver:version ?ver_ .
+
+      ?ver ver:next ?ver_ .
+
+      FILTER EXISTS {
+        ?e1 src:parent*/ver:version ?ver .
+      }
+      FILTER EXISTS {
+        ?e0_ src:parent*/ver:version ?ver_ .
+      }
+
+    } GROUP BY ?class0_ ?vdtor0_ ?cname0_ ?e1 ?fname0 ?ver ?ver_
+  }
+
+  FILTER (?n = 1)
+
+  OPTIONAL {
+    ?vdtor0x a java:VariableDeclarator ;
+             src:parent ?field0x ;
+             java:name ?fname0 ;
+             chg:removal ?e0x_ .
+
+    ?field0x a java:FieldDeclaration ;
+            java:inTypeDeclaration ?class1x .
+
+    ?class1x a java:TypeDeclaration ;
+             java:name ?cname1 ;
+             chg:mappedTo ?class1x_ .
+
+    ?class1x_ a java:TypeDeclaration .
+  }
+
+  FILTER EXISTS {
+    ?e0x_ src:parent*/ver:version ?ver_ .
+
+    ?class1x ver:version ?ver .
+    ?class1x_ ver:version ?ver_ .
+
+    ?class1x_ java:subClassOf+ ?class0_ .
+  }
+
+
+}
+

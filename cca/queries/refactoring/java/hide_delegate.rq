@@ -1,0 +1,201 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:   <http://codinuum.com/fb/>
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX svn:  <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+
+SELECT DISTINCT
+?invoke0 ?invoke1_ ?ClientCname 
+?ServerCname ?DelegateCname ?delegateMname ?serverMname_ ?e4 ?serverM_
+
+(?ClientC AS ?originalClientClass)
+(?ClientC_ AS ?modifiedClientClass)
+(?ServerC AS ?originalServerClass)
+(?ServerC_ AS ?modifiedServerClass)
+(?serverM_ AS ?addedServerMethod)
+(?e4 AS ?originalContext)
+(?ClientCname AS ?clientClassName)
+(?ServerCname AS ?serverClassName)
+(?DelegateCname AS ?delegateClassName)
+(?DelegateMname AS ?delegateMethodName)
+(?serverMname_ AS ?serverMethodName)
+(?invoke0 AS ?originalInvocation)
+(?invoke1_ AS ?modifiedInvocation)
+(?ServerCname AS ?GROUP)
+WHERE {
+
+
+  {
+    SELECT DISTINCT ?ver ?ver_ ?ServerCname ?ServerCname_ ?DelegateCname ?DelegateCname_ ?delegateMname 
+   ?delegateMname_ ?serverMname_ ?ServerC ?ServerC_
+    ?e4 ?serverM_
+    WHERE {
+
+      {
+        SELECT DISTINCT ?ver ?ver_ ?ServerCname ?ServerCname_ ?DelegateCname ?DelegateCname_ ?delegateMname_ 
+        ?serverMname_ ?e4 ?serverM_ ?ServerC ?ServerC_
+        WHERE {
+
+          # [Server]
+          {
+            SELECT DISTINCT ?ServerC ?ServerC_ ?serverM_ ?serverMname_ ?e4 ?ServerCname ?ServerCname_
+            WHERE {
+
+              ?serverM_ a java:MethodDeclaration ;
+                        java:inClass ?ServerC_ ;
+                        java:name ?serverMname_ ;
+                        chg:addition ?e4 .
+
+              ?e4 src:parent ?ServerC .
+
+              ?ServerC a java:ClassDeclaration ;
+                       java:fullyQualifiedName ?ServerCname ;
+                       chg:mappedTo ?ServerC_ .
+
+              ?ServerC_ a java:ClassDeclaration ;
+                        java:fullyQualifiedName ?ServerCname_ .
+
+            } GROUP BY ?ServerC ?ServerC_ ?serverM_ ?serverMname_ ?e4 ?ServerCname ?ServerCname_
+          }
+        
+          ?e4 ver:version ?ver .
+
+          ?ServerC ver:version ?ver .
+          ?ServerC_ ver:version ?ver_ .
+
+          ?ver ver:next ?ver_ .
+
+          {
+            SELECT DISTINCT ?serverM_ ?delegateMname_ ?e3
+            WHERE {
+              ?invoke2_ a java:PrimaryMethodInvocation ;
+                        java:inMethod ?serverM_ ;
+                        java:name ?delegateMname_ ;
+                        chg:addition ?e3 .
+            } GROUP BY ?serverM_ ?delegateMname_ ?e3
+          }
+
+          ?e3 ver:version ?ver .
+
+          {
+            SELECT DISTINCT ?ServerC ?ServerC_ ?delegateF ?delegateF_
+            WHERE {
+
+              ?delegateF a java:FieldDeclaration ;
+                         java:inClass ?ServerC ;
+                         chg:mappedTo ?delegateF_ .
+
+              ?delegateF_ a java:FieldDeclaration ;
+                          java:inClass ?ServerC_ .
+
+            } GROUP BY ?ServerC ?ServerC_ ?delegateF ?delegateF_
+          }
+
+          {
+            SELECT DISTINCT ?delegateF ?delegateF_ ?DelegateCname ?DelegateCname_
+            WHERE {
+
+              ?delegateT a java:ReferenceType ;
+                         java:inField ?delegateF ;
+                         java:name ?DelegateCname .
+
+              ?delegateT_ a java:ReferenceType ;
+                          java:inField ?delegateF_ ;
+                          java:name ?DelegateCname_ .
+
+            } GROUP BY ?delegateF ?delegateF_ ?DelegateCname ?DelegateCname_
+          }
+
+          FILTER (?ServerCname != ?DelegateCname)
+          FILTER (?ServerCname_ != ?DelegateCname_)
+
+        } GROUP BY ?ver ?ver_ ?ServerCname ?ServerCname_ ?DelegateCname ?DelegateCname_ ?delegateMname_ ?serverMname_
+        ?e4 ?serverM_ ?ServerC ?ServerC_
+      }
+
+      {
+        SELECT DISTINCT ?DelegateC ?DelegateC_ ?delegateMname ?delegateMname_ 
+        WHERE {
+
+          ?delegateM_ a java:MethodDeclaration ;
+                      java:inClass ?DelegateC_ ;
+                      java:name ?delegateMname_ .
+
+          ?delegateM a java:MethodDeclaration ;
+                     java:inClass ?DelegateC ;
+                     java:name ?delegateMname ;
+                     chg:correspondsTo ?delegateM_ .
+
+        } GROUP BY ?DelegateC ?DelegateC_ ?delegateMname ?delegateMname_ 
+      }
+
+      FILTER EXISTS {
+        ?DelegateC a java:ClassDeclaration ;
+                   java:fullyQualifiedName ?DelegateCname ;
+                   ver:version ?ver ;
+                   chg:mappedTo ?DelegateC_ .
+
+        ?DelegateC_ a java:ClassDeclaration ;
+                    ver:version ?ver_ ;
+                    java:fullyQualifiedName ?DelegateCname_ .
+      }
+
+    } GROUP BY ?ver ?ver_ ?ServerCname ?ServerCname_ ?DelegateCname ?DelegateCname_ ?delegateMname ?delegateMname_
+    ?serverMname_ ?e4 ?serverM_ ?ServerC ?ServerC_
+  }
+
+  # [Client]
+
+  OPTIONAL {
+    ?invoke0 a java:PrimaryMethodInvocation ;
+             java:inMethod ?clientM ;
+             java:name ?delegateMname ;
+             chg:removal ?e1_ . #
+
+    ?e1_ src:parent*/ver:version ?ver_ .
+
+    ?clientM a java:MethodDeclaration ;
+             java:inClass ?ClientC .
+
+    ?ClientC a java:ClassDeclaration ;
+             java:fullyQualifiedName ?ClientCname ;
+             ver:version ?ver .
+
+    ?ver ver:next ?ver_ .
+  }
+
+  OPTIONAL {
+    ?invoke1_ a java:PrimaryMethodInvocation ;
+              java:inMethod ?clientM_ ;
+              java:name ?serverMname_ ;
+              chg:addition ?e2 . #
+
+    ?e2 src:parent*/ver:version ?ver .
+
+    ?clientM_ a java:MethodDeclaration ;
+              java:inClass ?ClientC_ .
+
+    ?ClientC_ a java:ClassDeclaration ;
+              ver:version ?ver_ ;
+              java:fullyQualifiedName ?ClientCname_ .
+  }
+
+  FILTER EXISTS {
+    ?clientM chg:mappedTo ?clientM_ .
+    ?ClientC chg:mappedTo ?ClientC_ .
+  }
+
+  FILTER (?ClientCname != ?ServerCname && ?DelegateCname != ?ClientCname)
+  FILTER (?ClientCname_ != ?ServerCname_ && ?DelegateCname_ != ?ClientCname_)
+
+
+
+}

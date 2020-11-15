@@ -1,0 +1,376 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX ent:  <http://codinuum.com/fact/entity/>
+PREFIX rel:  <http://codinuum.com/fact/version/release/>
+PREFIX ext:  <http://codinuum.com/fact/external/>
+PREFIX src:  <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:  <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:  <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
+PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
+
+# ?meth -- inlined method
+
+SELECT DISTINCT ?meth ?meth_or_ctor ?meth_or_ctor_ ?mfullname ?ivk ?ctx_
+(?ivk AS ?removedInvocation)
+(?ctx_ AS ?modifiedContext)
+(?meth AS ?inlinedMethod)
+(?meth_or_ctor AS ?originalMethod)
+(?meth_or_ctor_ AS ?modifiedMethod)
+?originalMethodName
+?modifiedMethodName
+?originalMethodFQN
+?modifiedMethodFQN
+(?c AS ?originalClass)
+(?c_ AS ?modifiedClass)
+(?mname AS ?inlinedMethodName)
+(?mfullname AS ?inlinedMethodFQN)
+(?mfullname AS ?GROUP)
+WHERE {
+
+  {
+    SELECT DISTINCT ?ver ?ver_
+    ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?class ?mfullname ?msig ?ctx_
+    WHERE {
+
+      {
+        SELECT DISTINCT ?ver ?ver_
+        ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?class ?mfullname ?msig ?ctx_
+        WHERE {
+
+          {
+            SELECT DISTINCT ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?ctx_
+            WHERE {
+
+              {
+                SELECT DISTINCT ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth0 ?c ?c_ ?ctx_
+                WHERE {
+
+                  ?ivk #a java:InvocationOrInstanceCreation ;
+                       java:inClassBodyDeclaration ?meth_or_ctor0 ;
+                       java:name ?mname ;
+                       java:mayInvokeMethod ?meth0 .
+
+                  ?meth_or_ctor0 (java:inInstanceCreation/java:inClassBodyDeclaration) ?meth_or_ctor
+                  OPTION (TRANSITIVE, T_DISTINCT, T_NO_CYCLES, T_MIN(0), T_MAX(1)) .
+
+                  ?meth_or_ctor #a java:ClassBodyDeclaration ;
+                                java:inTypeDeclaration ?c .
+
+                  ?meth_or_ctor_ a java:ClassBodyDeclaration ;
+                                 java:inTypeDeclaration ?c_ .
+
+                  {
+                    SELECT DISTINCT ?meth_or_ctor ?meth_or_ctor_
+                    WHERE {
+                      {
+                        ?meth_or_ctor chg:mappedTo ?meth_or_ctor_ .
+                      }
+                      UNION
+                      {
+                        ?x src:parent ?meth_or_ctor ;
+                           chg:mappedTo ?x_ .
+                        ?x_ src:parent ?meth_or_ctor_ .
+                      }
+                    } GROUP BY ?meth_or_ctor ?meth_or_ctor_
+                  }
+
+#                  FILTER EXISTS {
+                    {
+                      ?ivk chg:removal ?ctx_ .
+                    }
+                    UNION
+                    {
+                      ?ivk chg:mappedTo ?ctx_ .
+                      FILTER NOT EXISTS {
+                        ?meth0 chg:mappedTo/^java:mayInvokeMethod ?ctx_ .
+                      }
+                    }
+#                  }
+
+                  FILTER NOT EXISTS {
+                    ?meth_or_ctor a java:FieldDeclaration .
+                  }
+                  FILTER NOT EXISTS {
+                    ?meth_or_ctor_ a java:FieldDeclaration .
+                  }
+
+                } GROUP BY ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth0 ?c ?c_ ?ctx_
+              }
+
+              ?meth0 (^java:inMethod/java:mayInvokeMethod) ?meth
+              OPTION (TRANSITIVE, T_DISTINCT, T_NO_CYCLES, T_MIN(0), T_MAX(1)) .
+
+            } GROUP BY ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?ctx_
+          }
+
+          FILTER (?meth != ?meth_or_ctor)
+
+          ?c ver:version ?ver .
+          ?c_ ver:version ?ver_ .
+          ?ver ver:next ?ver_ .
+
+          {
+            SELECT DISTINCT ?class ?meth ?mfullname ?mname ?msig
+            WHERE {
+
+              ?meth a java:MethodDeclaration ;
+                    java:inTypeDeclaration ?class ;
+                    java:name ?mname ;
+                    java:signature ?msig ;
+                    java:fullyQualifiedName ?mfullname .
+
+              FILTER NOT EXISTS {
+                ?meth chg:mappedEqTo [] .
+              }
+
+            } GROUP BY ?class ?meth ?mfullname ?mname ?msig
+          }
+
+          ?class ver:version ?ver .
+
+        } GROUP BY ?ver ?ver_
+        ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?class ?mfullname ?msig ?ctx_
+      }
+
+      FILTER NOT EXISTS {
+        ?m_ a java:MethodDeclaration ;
+            java:inTypeDeclaration ?td_ ;
+            java:name ?mname ;
+            java:signature ?msig ;
+            java:inTypeDeclaration/ver:version ?ver_ .
+        FILTER NOT EXISTS {
+          ?m_ ^chg:mappedStablyTo [] .
+        }
+        FILTER (EXISTS {
+          ?class chg:mappedTo ?class_ .
+          FILTER (EXISTS {
+            ?td_ java:subTypeOf* ?class_ .
+          } || EXISTS {
+            ?class_ java:subTypeOf* ?td_ .
+          })
+        } || NOT EXISTS {
+          ?class chg:mappedTo [] .
+        })
+      }
+
+      FILTER (EXISTS { # # # # # # # # # # # # # # # #
+
+        ?ctxt java:inClassBodyDeclaration ?meth_or_ctor ;
+              chg:mappedTo ?ctxt_ .
+
+        ?ctxt_ java:inClassBodyDeclaration ?meth_or_ctor_ .
+
+        ?ivk src:parent+ ?ctxt .
+
+        ?ent0 a java:Expression ;
+              a ?cat0 OPTION (INFERENCE NONE) ;
+              java:inMethod ?meth ;
+              chg:mappedTo ?ent0_ .
+
+        ?ent0_ a java:Expression ;
+               a ?cat0 OPTION (INFERENCE NONE) ;
+               src:parent+ ?ctxt_ .
+
+        FILTER NOT EXISTS {
+          ?ent0 a java:FieldAccess .
+        }
+        FILTER NOT EXISTS {
+          ?ent0 a java:Name .
+        }
+        FILTER NOT EXISTS {
+          ?ent0 a java:AmbiguousName .
+        }
+
+      } || EXISTS { # # # # # # # # # # # # # # # #
+
+        ?ent0_ a java:Entity ;
+               ^chg:mappedTo ?ent0 ;
+               java:inClassBodyDeclaration ?meth_or_ctor_ .
+
+        ?ent0 a java:Entity ;
+              java:inMethod ?meth .
+
+        FILTER (EXISTS {
+          ?ent0 a java:BlockStatement ;
+                java:name [] .
+          ?ent0_ a java:BlockStatement ;
+                 java:name [] .
+        } || EXISTS {
+          ?ent0 a java:InvocationOrInstanceCreation .
+          ?ent0_ a java:InvocationOrInstanceCreation .
+        })
+
+      } || EXISTS { # # # # # # # # # # # # # # # #
+
+        ?ent0_ a java:Entity ;
+               src:treeDigest ?d0 ;
+               java:inClassBodyDeclaration ?meth_or_ctor_ .
+
+        ?ent0 a java:Entity ;
+              src:treeDigest ?d0 ;
+              java:inMethod ?meth .
+
+        FILTER (EXISTS {
+          ?ent0_ chg:addition [] .
+        } || EXISTS {
+          ?ent0_ ^chg:relabeled [] .
+        })
+
+        FILTER (EXISTS {
+          ?ent0 a java:BlockStatement ;
+                java:name [] .
+        } || EXISTS {
+          ?ent0 a java:InvocationOrInstanceCreation .
+        })
+
+        {
+          ?ivk chg:removal ?ctx0_ .
+          ?ent0_ src:parent+ ?ctx0_ .
+        }
+        UNION
+        {
+          ?ivk chg:relabeled ?ent0_ .
+        }
+
+        OPTIONAL {
+          ?m0 a java:Entity ;
+              src:treeDigest ?d0 ;
+              java:inClassBodyDeclaration ?meth_or_ctor ;
+              chg:mappedEqTo ?ent0_ .
+        }
+        FILTER (!BOUND(?m0))
+
+      } || EXISTS { # # # # # # # # # # # # # # # #
+
+        ?ent0 a java:Primary ;
+              src:value ?v ;
+              java:inMethod ?meth .
+
+        ?ent0_ a java:Primary ;
+               src:value ?v ;
+               java:inClassBodyDeclaration ?meth_or_ctor_ .
+
+        FILTER (?v NOT IN ("' '", "'\\t'", "\"\"", "\"[]\"", "0", "1", "-1",
+                           "true", "false", "null"))
+        FILTER (STRLEN(?v) > 3)
+
+        FILTER (EXISTS {
+          ?meth_or_ctor java:name ?mn0 .
+          ?meth_or_ctor_ java:name ?mn0 .
+        } || EXISTS {
+          []  a java:Parameter ;
+              src:parent/src:parent ?meth_or_ctor ;
+              chg:mappedTo/src:parent/src:parent ?meth_or_ctor_ .
+        } || EXISTS {
+          [] java:mayInvokeMethod ?meth_or_ctor ;
+             chg:mappedTo [ java:mayInvokeMethod ?meth_or_ctor_ ] .
+        })
+
+      } || EXISTS { # # # # # # # # # # # # # # # #
+
+        {
+          ?ivk chg:relabeled ?ent0_ .
+        }
+        UNION
+        {
+          ?ivk chg:removal ?ctx0_ ;
+               src:parent ?ctx0 .
+          ?ent0_ chg:addition ?ctx0 ;
+                 src:parent ?ctx0_ .
+        }
+
+        ?ent0_ a java:Invocation ;
+               java:extendedName ?en_ ;
+               java:inClassBodyDeclaration ?meth_or_ctor_ .
+
+        ?ent0 a java:Invocation ;
+              java:inMethod ?meth .
+
+        {
+          ?ent0 java:extendedName ?en_ .
+        }
+        UNION
+        {
+          ?ent0_ java:mayInvokeMethod ?m_ .
+          ?ent0 java:mayInvokeMethod/chg:mappedTo ?m_ .
+          FILTER NOT EXISTS {
+            [] a java:Invocation ;
+               java:inClassBodyDeclaration ?meth_or_ctor ;
+               java:mayInvokeMethod/chg:mappedTo ?m_ .
+          }
+        }
+
+        FILTER (EXISTS {
+          ?meth java:nParameters 0 .
+        } || EXISTS {
+          ?args0 a java:Arguments ;
+                 src:parent ?ent0 .
+
+          ?arg0 a java:Expression ;
+                src:parent ?args0 .
+
+          ?x0 src:parent* ?arg0 ;
+              java:declaredBy ?param0 .
+
+          ?param0 a java:Parameter ;
+                  src:parent/src:parent ?meth .
+        })
+
+      } || EXISTS { # # # # # # # # # # # # # # # #
+
+        ?ent0 java:inMethod ?meth ;
+              java:declaredBy ?vdtor .
+        ?vdtor chg:mappedTo ?vdtor_ .
+        FILTER (EXISTS {
+          ?vdtor chg:mappedStablyTo ?vdtor_ .
+          [] java:declaredBy ?vdtor ;
+             chg:mappedTo [ java:declaredBy ?vdtor_ ] .
+        } || EXISTS {
+          ?vdtor java:name ?vn .
+          ?vdtor_ java:name ?vn .
+        })
+
+        FILTER EXISTS {
+          ?ent0_ java:inClassBodyDeclaration ?meth_or_ctor_ ;
+                 java:declaredBy ?vdtor_ .
+        }
+
+        FILTER NOT EXISTS {
+          [] java:declaredBy ?vdtor ;
+             java:inClassBodyDeclaration ?meth_or_ctor .
+        }
+
+        FILTER (EXISTS {
+          ?meth_or_ctor java:name ?mn0 .
+          ?meth_or_ctor_ java:name ?mn0 .
+        } || EXISTS {
+          []  a java:Parameter ;
+              src:parent/src:parent ?meth_or_ctor ;
+              chg:mappedTo/src:parent/src:parent ?meth_or_ctor_ .
+        } || EXISTS {
+          [] java:mayInvokeMethod ?meth_or_ctor ;
+             chg:mappedTo [ java:mayInvokeMethod ?meth_or_ctor_ ] .
+        })
+
+      })
+
+    } GROUP BY ?ver ?ver_
+    ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?class ?mfullname ?msig ?ctx_
+  }
+
+  OPTIONAL {
+    ?meth_or_ctor java:name ?originalMethodName ;
+                  java:fullyQualifiedName ?originalMethodFQN .
+  }
+  OPTIONAL {
+    ?meth_or_ctor_ java:name ?modifiedMethodName ;
+                   java:fullyQualifiedName ?modifiedMethodFQN .
+  }
+
+  # ?c java:fullyQualifiedName ?cfqn .
+  # ?c_ java:fullyQualifiedName ?cfqn_ ;
+  #     java:name ?cname_ .
+
+}

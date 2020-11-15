@@ -1,0 +1,115 @@
+
+DEFINE input:inference "ont.cpi"
+
+PREFIX fb:      <http://codinuum.com/fb/>
+PREFIX ent:     <http://codinuum.com/fact/entity/>
+PREFIX variant: <http://codinuum.com/fact/version/variant/>
+PREFIX rel:     <http://codinuum.com/fact/version/release/>
+PREFIX svn:     <http://codinuum.com/fact/version/svn/revision/>
+PREFIX src:     <http://codinuum.com/ontologies/2012/10/source-code-entity#>
+PREFIX ver:     <http://codinuum.com/ontologies/2012/10/versioning#>
+PREFIX chg:     <http://codinuum.com/ontologies/2012/10/primitive-change#>
+PREFIX f:       <http://codinuum.com/ontologies/2013/05/fortran-entity#>
+PREFIX java:    <http://codinuum.com/ontologies/2012/10/java-entity#>
+
+SELECT DISTINCT
+?assign ?dtor_ ?pname ?mname
+(?dtor_ AS ?addedDeclarator)
+(?meth_or_ctor AS ?originalMethod)
+(?meth_or_ctor_ AS ?modifiedMethod)
+(?assign AS ?removedAssignment)
+(?pname AS ?parameterName)
+(?mname AS ?methodName)
+(?mname AS ?GROUP)
+WHERE {
+
+
+  {
+    SELECT DISTINCT ?ver ?ver_ ?param ?param_ ?meth_or_ctor ?meth_or_ctor_ ?pname ?mname ?assign
+    WHERE {
+
+      {
+        SELECT DISTINCT ?ver ?ver_ ?param ?param_ ?meth_or_ctor ?meth_or_ctor_ ?pname ?mname
+        WHERE {
+
+          {
+            SELECT DISTINCT ?param ?param_ ?params_ ?meth_or_ctor ?meth_or_ctor_ ?pname ?mname
+            WHERE {
+
+              ?param a java:Parameter ;
+                     src:parent ?params ;
+                     java:name ?pname ;
+                     chg:mappedTo ?param_ .
+
+              ?params a java:Parameters ;
+                      java:inMethodOrConstructor ?meth_or_ctor ;
+                      chg:mappedTo ?params_ .
+
+              ?meth_or_ctor a java:MethodOrConstructor ;
+                            java:name ?mname ;
+                            chg:mappedTo ?meth_or_ctor_ .
+
+
+            } GROUP BY ?param ?param_ ?params_ ?meth_or_ctor ?meth_or_ctor_ ?pname ?mname
+          }
+
+          FILTER EXISTS {
+            ?param_ a java:Parameter ;
+                    src:parent ?params_ .
+
+            ?params_ a java:Parameters ;
+                     java:inMethodOrConstructor ?meth_or_ctor_ .
+
+            ?meth_or_ctor_ a java:MethodOrConstructor .
+          }
+
+          ?meth_or_ctor src:parent*/ver:version ?ver .
+
+          ?meth_or_ctor_ src:parent*/ver:version ?ver_ .
+
+          ?ver ver:next ?ver_ .
+
+        } GROUP BY ?ver ?ver_ ?param ?param_ ?meth_or_ctor ?meth_or_ctor_ ?pname ?mname
+      }
+
+      {
+        SELECT DISTINCT ?meth_or_ctor ?param ?assign ?e0_
+        WHERE {
+
+          ?assign a java:AssignmentOp ;
+                  java:inMethodOrConstructor ?meth_or_ctor ;
+                  src:children (?v ?x) ;
+                  chg:deletedOrPruned ?e0_ .
+
+          ?v a java:Name ;
+             java:inMethodOrConstructor ?meth_or_ctor ;
+             java:declaredBy ?param .
+
+        } GROUP BY ?meth_or_ctor ?param ?assign ?e0_
+      }
+
+      ?e0_ src:parent*/ver:version ?ver_ .
+
+    } GROUP BY ?ver ?ver_ ?param ?param_ ?meth_or_ctor ?meth_or_ctor_ ?pname ?mname ?assign
+  }
+
+  {
+    SELECT DISTINCT ?meth_or_ctor_ ?param_ ?dtor_ ?e1
+    WHERE {
+
+      ?dtor_ a java:VariableDeclarator ;
+             java:inMethodOrConstructor ?meth_or_ctor_ ;
+             java:initializer ?v_ ;
+             chg:insertedOrGrafted ?e1 .
+
+      ?v_ a java:Name ;
+          java:inMethodOrConstructor ?meth_or_ctor_ ;
+          java:declaredBy ?param_ .
+
+    } GROUP BY ?meth_or_ctor_ ?param_ ?dtor_ ?e1
+  }
+
+  ?e1 src:parent*/ver:version ?ver .
+
+
+}
