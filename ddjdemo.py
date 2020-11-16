@@ -30,8 +30,8 @@ import re
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 #IMAGE_NAME = 'codecontinuum/ddj:esecfse2018'
-#IMAGE_NAME = 'codecontinuum/ddj'
-IMAGE_NAME = 'ddjx'
+IMAGE_NAME = 'codecontinuum/ddj'
+#IMAGE_NAME = 'ddjx'
 
 #
 
@@ -444,7 +444,7 @@ def main():
     try:
         args.func(args)
     except:
-        raise
+        #raise
         parser.print_help()
 
 

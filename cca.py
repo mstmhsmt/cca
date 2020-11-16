@@ -28,8 +28,8 @@ from threading import Thread
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 #IMAGE_NAME = 'codinuum/cca'
-#IMAGE_NAME = 'codecontinuum/ddj'
-IMAGE_NAME = 'ddjx'
+IMAGE_NAME = 'codecontinuum/ddj'
+#IMAGE_NAME = 'ddjx'
 
 #
 
@@ -201,6 +201,12 @@ def run_diffast(container_cmd, original, modified, cache=DEFAULT_CACHE_DIR, clea
             print('Execution failed: {}'.format(e))
 
 
+def gen_work_dir_name():
+    dt = datetime.now()
+    ts = '{:04}{:02}{:02}{:02}{:02}{:02}'.format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+    dn = '{}{}'.format(CCA_WORK_DIR_NAME, ts)
+    return dn
+
 def run_dd(container_cmd, engine, proj_dir, v_good, v_bad, build_script='build.sh', test_script='test.sh',
            proj_id=None, include=[], lang=[], algo='ddmin',
            shuffle=False, greedy=False, staged=False,
@@ -213,7 +219,10 @@ def run_dd(container_cmd, engine, proj_dir, v_good, v_bad, build_script='build.s
 
     proj_dir = os.path.abspath(proj_dir)
 
-    work_dir = os.path.join(proj_dir, CCA_WORK_DIR_NAME)
+    work_dir = os.path.join(proj_dir, gen_work_dir_name())
+
+    print('Working directory is "{}".'.format(work_dir))
+
     v_good_dir = os.path.join(proj_dir, v_good)
     v_bad_dir = os.path.join(proj_dir, v_bad)
 
@@ -394,7 +403,8 @@ def main():
     parser.add_argument('-x', '--experimental', dest='devel', action='store_true',
                         help='use experimental image')
 
-    p = ArgumentParser(add_help=False)
+    p = ArgumentParser(add_help=True)
+
     subparsers = p.add_subparsers(title='subcommands')
 
     # Docker image update
@@ -526,8 +536,8 @@ def main():
     try:
         args.func(args)
     except:
-        raise
-        parser.print_help()
+        #raise
+        p.print_help()
 
 
 if __name__ == '__main__':

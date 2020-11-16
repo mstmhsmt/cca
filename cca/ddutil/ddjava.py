@@ -158,6 +158,9 @@ class JavaDD(DD, object):
 
         self._custom_split = custom_split
 
+    def show_status(self, run, cs, n):
+        mes = 'dd (run #{}): trying {}'.format(run, '+'.join([str(len(cs[i])) for i in range(n)]))
+        self.set_status(mes)
 
     def get_max_stmt_level(self):
         return self._decomp.get_max_stmt_level(*self._vp)
@@ -1047,6 +1050,8 @@ def run(algo, proj_id, working_dir, conf=None, src_dir=None, vers=None,
         c_ungrouped = jdd.ungroup(c)
         c_ungrouped.sort(key=getnum)
         print('ungrouped (%d): %s' % (len(c_ungrouped), c_ungrouped))
+
+        set_status('delta decomposed into {}({}) components'.format(len(c), len(c_ungrouped)))
 
         staging = Staging(algo, jdd, staged=staged)
 

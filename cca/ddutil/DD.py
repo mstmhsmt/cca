@@ -273,6 +273,14 @@ class DD:
 
         return 1
 
+    def show_status(self, run, cs, n):
+        print("dd (run #" + repr(run) + "): trying", end=' ')
+        for i in range(n):
+            if i > 0:
+                print("+", end=' ')
+            print(len(cs[i]), end=' ')
+        print()
+
     # Output
     def coerce(self, c):
         """Return the configuration C as a compact string"""
@@ -471,12 +479,7 @@ class DD:
 
             cs = self.split(c, n)
 
-            print("dd (run #" + repr(run) + "): trying", end=' ')
-            for i in range(n):
-                if i > 0:
-                    print("+", end=' ')
-                print(len(cs[i]), end=' ')
-            print()
+            self.show_status(run, cs, n)
 
             # Check subsets
             ts = []
@@ -628,12 +631,7 @@ class DD:
 
             cs = self.split(c, n)
 
-            print("dd (run #" + repr(run) + "): trying", end=' ')
-            for i in range(n):
-                if i > 0:
-                    print("+", end= ' ')
-                print(len(cs[i]), end= ' ')
-            print()
+            self.show_status(run, cs, n)
 
             c_failed    = 0
             cbar_failed = 0
@@ -764,13 +762,7 @@ class DD:
 
             cs = self.split(c, n)
 
-            print()
-            print("dd (run #" + repr(run) + "): trying", end=' ')
-            for i in range(n):
-                if i > 0:
-                    print("+", end=' ')
-                print(len(cs[i]), end=' ')
-            print()
+            self.show_status(run, cs, n)
 
             progress = 0
 

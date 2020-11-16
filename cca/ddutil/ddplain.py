@@ -141,6 +141,10 @@ class PlainDD(DD):
 
         self._stage = 1
 
+    def show_status(self, run, cs, n):
+        mes = 'dd (run #{}): trying {}'.format(run, '+'.join([str(len(cs[i])) for i in range(n)]))
+        self.set_status(mes)
+
     def set_stage(self, stg):
         self._stage = stg
 
