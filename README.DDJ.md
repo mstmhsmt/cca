@@ -1,4 +1,4 @@
-# DD/Java: Delta Debugging on Java Source Code Changes
+# DD/Java: Delta Debugging for Java Programs
 
 DD/Java (DDJ for short) is an experimental implementation of the reported in the following paper.
 
