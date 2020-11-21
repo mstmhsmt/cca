@@ -222,7 +222,7 @@ def main():
                   fact_into_directory=os.path.join(FACT_DIR, proj_id),
                   fact_size_thresh=FACT_SIZE_THRESH,
                   fact_for_cfg=True,
-                  fact_encoding=Enc.FDLC,
+                  fact_encoding=Enc.FDLCO,
                   fact_hash_algo=HashAlgo.MD5,
                   dump_delta=True,
                   fact_for_delta=True,
@@ -260,8 +260,14 @@ def main():
     fb.setup()
 
     # DD
+    dd_root = DD_DIR
+    logger.info('dd_root: "%s"' % dd_root)
+    if not ensure_dir(dd_root):
+        logger.warning('failed to create directory: "%s"' % dd_root)
+        return
+
     set_status('starting {}...'.format(args.algo))
-    ok = ddjava.run(args.algo, proj_id, DD_DIR, src_dir=args.proj_dir, conf=conf,
+    ok = ddjava.run(args.algo, proj_id, dd_root, src_dir=args.proj_dir, conf=conf,
                     build_script=args.build_script, test_script=args.test_script, staged=args.staged,
                     keep_going=keep_going, shuffle=args.shuffle, custom_split=args.custom_split,
                     noresolve=args.noresolve, noref=args.noref, nochg=args.nochg,

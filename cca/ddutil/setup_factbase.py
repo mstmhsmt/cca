@@ -246,14 +246,6 @@ class FB(object):
     def setup(self):
         logger.info('setting up FB for "%s"...' % self._proj_id)
 
-        dd_root = DD_DIR
-
-        logger.info('dd_root: "%s"' % dd_root)
-
-        if not ensure_dir(dd_root):
-            logger.warning('failed to create directory: "%s"' % dd_root)
-            return
-
         # build FB
         self.set_status('building FB...')
         rc = self.build_fb(mem=self._mem)
