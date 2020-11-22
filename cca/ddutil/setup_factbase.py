@@ -68,7 +68,7 @@ def create_argparser(desc):
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
                         help='enable debug printing')
 
-    parser.add_argument('-p', '--port', dest='port', default=VIRTUOSO_PORT,
+    parser.add_argument('--port', dest='port', default=VIRTUOSO_PORT,
                         metavar='PORT', type=int, help='set port number')
 
     parser.add_argument('--pw', dest='pw', metavar='PASSWORD', default=VIRTUOSO_PW,

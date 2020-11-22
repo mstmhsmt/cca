@@ -40,14 +40,16 @@ WHERE {
         WHERE {
 
           {
-            SELECT DISTINCT ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?ctx_
+            SELECT DISTINCT ?ver ?ver_
+            ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?ctx_
             WHERE {
+
 
               {
                 SELECT DISTINCT ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth0 ?c ?c_ ?ctx_
                 WHERE {
 
-                  ?ivk #a java:InvocationOrInstanceCreation ;
+                  ?ivk a java:InvocationOrInstanceCreation ;
                        java:inClassBodyDeclaration ?meth_or_ctor0 ;
                        java:name ?mname ;
                        java:mayInvokeMethod ?meth0 .
@@ -55,39 +57,33 @@ WHERE {
                   ?meth_or_ctor0 (java:inInstanceCreation/java:inClassBodyDeclaration) ?meth_or_ctor
                   OPTION (TRANSITIVE, T_DISTINCT, T_NO_CYCLES, T_MIN(0), T_MAX(1)) .
 
-                  ?meth_or_ctor #a java:ClassBodyDeclaration ;
+                  ?meth_or_ctor a java:ClassBodyDeclaration ;
                                 java:inTypeDeclaration ?c .
 
                   ?meth_or_ctor_ a java:ClassBodyDeclaration ;
                                  java:inTypeDeclaration ?c_ .
 
                   {
-                    SELECT DISTINCT ?meth_or_ctor ?meth_or_ctor_
-                    WHERE {
-                      {
-                        ?meth_or_ctor chg:mappedTo ?meth_or_ctor_ .
-                      }
-                      UNION
-                      {
-                        ?x src:parent ?meth_or_ctor ;
-                           chg:mappedTo ?x_ .
-                        ?x_ src:parent ?meth_or_ctor_ .
-                      }
-                    } GROUP BY ?meth_or_ctor ?meth_or_ctor_
+                    ?meth_or_ctor chg:mappedTo ?meth_or_ctor_ .
+                  }
+                  UNION
+                  {
+                    ?x src:parent ?meth_or_ctor ;
+                       chg:mappedTo ?x_ .
+                    ?x_ src:parent ?meth_or_ctor_ .
                   }
 
-#                  FILTER EXISTS {
-                    {
-                      ?ivk chg:removal ?ctx_ .
+                  {
+                    ?ivk chg:removal ?ctx_ .
+                  }
+                  UNION
+                  {
+                    ?ivk chg:mappedTo ?ctx_ .
+                    FILTER NOT EXISTS {
+                      ?meth0 chg:mappedTo/^java:mayInvokeMethod ?ctx_ .
                     }
-                    UNION
-                    {
-                      ?ivk chg:mappedTo ?ctx_ .
-                      FILTER NOT EXISTS {
-                        ?meth0 chg:mappedTo/^java:mayInvokeMethod ?ctx_ .
-                      }
-                    }
-#                  }
+                  }
+
 
                   FILTER NOT EXISTS {
                     ?meth_or_ctor a java:FieldDeclaration .
@@ -102,37 +98,36 @@ WHERE {
               ?meth0 (^java:inMethod/java:mayInvokeMethod) ?meth
               OPTION (TRANSITIVE, T_DISTINCT, T_NO_CYCLES, T_MIN(0), T_MAX(1)) .
 
-            } GROUP BY ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?ctx_
+
+              FILTER (?meth != ?meth_or_ctor)
+
+              ?c ver:version ?ver .
+              ?c_ ver:version ?ver_ .
+              ?ver ver:next ?ver_ .
+
+            } GROUP BY ?ver ?ver_
+            ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?ctx_
           }
 
-          FILTER (?meth != ?meth_or_ctor)
+          ?meth a java:MethodDeclaration ;
+                java:inTypeDeclaration ?class ;
+                java:name ?mname ;
+                java:signature ?msig ;
+                java:fullyQualifiedName ?mfullname .
 
-          ?c ver:version ?ver .
-          ?c_ ver:version ?ver_ .
-          ?ver ver:next ?ver_ .
-
-          {
-            SELECT DISTINCT ?class ?meth ?mfullname ?mname ?msig
-            WHERE {
-
-              ?meth a java:MethodDeclaration ;
-                    java:inTypeDeclaration ?class ;
-                    java:name ?mname ;
-                    java:signature ?msig ;
-                    java:fullyQualifiedName ?mfullname .
-
-              FILTER NOT EXISTS {
-                ?meth chg:mappedEqTo [] .
-              }
-
-            } GROUP BY ?class ?meth ?mfullname ?mname ?msig
+          FILTER NOT EXISTS {
+            ?meth chg:mappedEqTo [] .
           }
-
-          ?class ver:version ?ver .
 
         } GROUP BY ?ver ?ver_
         ?meth_or_ctor ?meth_or_ctor_ ?mname ?ivk ?meth ?c ?c_ ?class ?mfullname ?msig ?ctx_
       }
+
+      FILTER EXISTS {
+        ?class a java:TypeDeclaration ;
+               ver:version ?ver .
+      }
+
 
       FILTER NOT EXISTS {
         ?m_ a java:MethodDeclaration ;
@@ -369,8 +364,5 @@ WHERE {
                    java:fullyQualifiedName ?modifiedMethodFQN .
   }
 
-  # ?c java:fullyQualifiedName ?cfqn .
-  # ?c_ java:fullyQualifiedName ?cfqn_ ;
-  #     java:name ?cname_ .
 
 }

@@ -162,19 +162,6 @@ def main():
     if args.debug:
         log_level = logging.DEBUG
 
-    ensure_dir(LOG_DIR)
-
-    setup_logger(logger, log_level, log_file=os.path.join(LOG_DIR, 'ddj.log'))
-
-    setup_factbase.logger = logger
-    misc.logger = logger
-    srcdiff.logger = logger
-    virtuoso.logger = logger
-    materialize_fact.logger = logger
-    find_change_patterns.logger = logger
-
-    ###
-
     if args.proj_id == None:
         proj_id = os.path.basename(args.proj_dir)
     else:
@@ -184,6 +171,19 @@ def main():
     v_bad = args.v_bad
 
     keep_going = args.keep_going
+
+    ensure_dir(LOG_DIR)
+
+    setup_logger(logger, log_level, log_file=os.path.join(LOG_DIR, '{}.{}-{}.ddj.log'.format(proj_id, v_good, v_bad)))
+
+    setup_factbase.logger = logger
+    misc.logger = logger
+    srcdiff.logger = logger
+    virtuoso.logger = logger
+    materialize_fact.logger = logger
+    find_change_patterns.logger = logger
+
+    ###
 
     installer_path = os.path.join(args.proj_dir, DEPENDENCIES_INSTALLER)
     if os.path.exists(installer_path):

@@ -38,21 +38,21 @@ WHERE {
         WHERE {
 
           {
-            SELECT DISTINCT ?SuperC_ ?SuperCname_ ?e0
+            SELECT DISTINCT ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
             WHERE {
 
               ?SuperC_ a java:ClassDeclaration ;
                        java:fullyQualifiedName ?SuperCname_ ;
                        chg:insertedOrGrafted ?e0 .
 
-            } GROUP BY ?SuperC_ ?SuperCname_ ?e0
+              ?e0 src:parent*/ver:version ?ver .
+
+              ?SuperC_ ver:version ?ver_ .
+
+              ?ver ver:next ?ver_ .
+
+            } GROUP BY ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
           }
-
-          ?e0 src:parent*/ver:version ?ver .
-
-          ?SuperC_ ver:version ?ver_ .
-
-          ?ver ver:next ?ver_ .
 
           ?C0 a java:ClassDeclaration ;
               java:name ?C0name ;
@@ -76,8 +76,8 @@ WHERE {
       ?meth_ a java:MethodDeclaration ;
              java:inTypeDeclaration ?SuperC_ ;
              java:fullyQualifiedName ?mfqn_ ;
-             java:name ?mname_ ;
-             java:signature ?msig_ .
+             java:name ?mname_ .
+             #java:signature ?msig_ .
 
       ?meth a java:MethodDeclaration ;
             java:inTypeDeclaration ?C0 ;
@@ -92,6 +92,10 @@ WHERE {
             java:signature ?msig_ .
       }
       FILTER (!BOUND(?m_))
+
+      FILTER EXISTS {
+        ?meth_ java:signature ?msig_ .
+      }
 
     } GROUP BY ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
     ?C0 ?C0_ ?C0name ?C0name_ ?C0fqn ?C0fqn_

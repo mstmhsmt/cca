@@ -3,7 +3,7 @@
 import os.path
 
 import pathsetup
-from materialize_fact import main, Materializer, DEFAULT_PORT, VIRTUOSO_PW
+from materialize_fact import main, Materializer, VIRTUOSO_PORT, VIRTUOSO_PW
 
 QUERY_DIR = os.path.join(pathsetup.CCA_HOME, 'queries', 'refactoring')
 
@@ -142,7 +142,7 @@ QUERIES = { 'java' :
             # ],
             }
 
-def materialize(proj_id, pw=VIRTUOSO_PW, port=DEFAULT_PORT, conf=None):
+def materialize(proj_id, pw=VIRTUOSO_PW, port=VIRTUOSO_PORT, conf=None):
     m = Materializer(QUERY_DIR, QUERIES, proj_id, pw=pw, port=port, conf=conf)
     rc = m.materialize()
     return rc

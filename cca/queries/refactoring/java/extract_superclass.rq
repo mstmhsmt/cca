@@ -12,70 +12,110 @@ PREFIX java: <http://codinuum.com/ontologies/2012/10/java-entity#>
 PREFIX c:    <http://codinuum.com/ontologies/2012/10/c-entity#>
 
 
-SELECT DISTINCT ?meth ?meth_
-?e0 ?SuperC_ ?SuperCname_
-?C0x ?C0x_ ?C0name 
-(?mname_ AS ?movedMethodName)
-(?SuperC_ AS ?extractedSuperclass)
-(?e0 AS ?originalContext)
-(?C0x AS ?originalClass)
-(?C0x_ AS ?modifiedClass)
-(?C0name AS ?className)
-(?SuperCname_ AS ?superclassName)
-(?SuperCname_ AS ?GROUP)
+SELECT DISTINCT ?meth ?meth_ ?C0 ?C0_ ?SuperC_ ?mname_ ?msig_ ?C0name ?SuperCname_ ?ctx ?ctx_
+(?C0 AS ?fromClass)
+(?SuperC_ AS ?toClass)
+(?C0name AS ?fromClassName)
+(?SuperCname_ AS ?toClassName)
+(?ctx AS ?context)
+(?ctx_ AS ?context_)
+(?meth AS ?originalMethod)
+(?meth_ AS ?movedMethod)
+(?mname_ AS ?methodName)
+(?msig_ AS ?signature)
+(?mname_ AS ?GROUP)
 WHERE {
 
   {
-    SELECT DISTINCT ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0 (COUNT(DISTINCT ?C0) AS ?n)
+    SELECT DISTINCT ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
+    ?C0 ?C0_ ?C0name ?C0name_ ?C0fqn ?C0fqn_
+    ?meth ?meth_ ?mname_ ?msig_ ?mfqn ?mfqn_
     WHERE {
 
       {
-        SELECT DISTINCT ?SuperC_ ?SuperCname_ ?e0
+        SELECT DISTINCT ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
+        ?C0 ?C0_ ?C0name ?C0name_ ?C0fqn ?C0fqn_
         WHERE {
 
-          ?SuperC_ a java:ClassDeclaration ;
-                   java:fullyQualifiedName ?SuperCname_ ;
-                   chg:insertedOrGrafted ?e0 .
+          {
+            SELECT DISTINCT ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
+            WHERE {
 
-        } GROUP BY ?SuperC_ ?SuperCname_ ?e0
+              ?SuperC_ a java:ClassDeclaration ;
+                       java:fullyQualifiedName ?SuperCname_ ;
+                       chg:insertedOrGrafted ?e0 .
+
+              ?e0 src:parent*/ver:version ?ver .
+
+              ?SuperC_ ver:version ?ver_ .
+
+              ?ver ver:next ?ver_ .
+
+            } GROUP BY ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
+          }
+
+          ?C0 a java:ClassDeclaration ;
+              java:name ?C0name ;
+              java:fullyQualifiedName ?C0fqn ;
+              chg:mappedTo ?C0_ .
+
+          ?C0_ a java:ClassDeclaration ;
+               java:name ?C0name_ ;
+               java:fullyQualifiedName ?C0fqn_ ;
+               java:subClassOf ?SuperC_ .
+
+          FILTER EXISTS {
+            ?C0 ver:version ?ver .
+            ?C0_ ver:version ?ver_ .
+          }
+
+        } GROUP BY ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
+        ?C0 ?C0_ ?C0name ?C0name_ ?C0fqn ?C0fqn_
       }
 
-      ?e0 src:parent*/ver:version ?ver .
+      ?meth_ a java:MethodDeclaration ;
+             java:inTypeDeclaration ?SuperC_ ;
+             java:fullyQualifiedName ?mfqn_ ;
+             java:name ?mname_ .
+      #        java:signature ?msig_ .
 
-      ?SuperC_ ver:version ?ver_ .
+      ?meth a java:MethodDeclaration ;
+            java:inTypeDeclaration ?C0 ;
+            java:fullyQualifiedName ?mfqn ;
+            java:name ?mname_ ;
+            java:signature ?msig_ .
 
-      ?ver ver:next ?ver_ .
-
-      ?C0 a java:ClassDeclaration ;
-          chg:mappedTo ?C0_ .
-
-      ?C0_ a java:ClassDeclaration ;
-           java:subClassOf ?SuperC_ .
+      OPTIONAL {
+        ?m_ a java:MethodDeclaration ;
+            java:inTypeDeclaration ?C0_ ;
+            java:name ?mname_ ;
+            java:signature ?msig_ .
+      }
+      FILTER (!BOUND(?m_))
 
       FILTER EXISTS {
-        ?C0 ver:version ?ver .
-        ?C0_ ver:version ?ver_ .
+        ?meth_ java:signature ?msig_ .
       }
-      
+
     } GROUP BY ?ver ?ver_ ?SuperC_ ?SuperCname_ ?e0
+    ?C0 ?C0_ ?C0name ?C0name_ ?C0fqn ?C0fqn_
+    ?meth ?meth_ ?mname_ ?msig_ ?mfqn ?mfqn_
   }
 
-  FILTER (?n > 1)
-
-  {
-    SELECT DISTINCT ?SuperC_ ?C0x ?C0x_ ?C0name
-    WHERE {
-      ?C0x a java:ClassDeclaration ;
-           java:name ?C0name ;
-           chg:mappedTo ?C0x_ .
-
-      ?C0x_ a java:ClassDeclaration ;
-            java:subClassOf ?SuperC_ .
-
-    } GROUP BY ?SuperC_ ?C0x ?C0x_ ?C0name
+  OPTIONAL {
+    {
+      ?meth_ chg:addition ?ctx .
+    } UNION {
+      ?meth_ ^chg:mappedTo ?ctx .
+    }
   }
 
-  ?C0x ver:version ?ver .
-  ?C0x_ ver:version ?ver_ .
+  OPTIONAL {
+    {
+      ?meth chg:removal ?ctx_ .
+    } UNION {
+      ?meth chg:mappedTo ?ctx_ .
+    }
+  }
 
 }

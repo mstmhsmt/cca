@@ -47,6 +47,7 @@ from sparql import get_localname
 import sparql
 
 from virtuoso import VIRTUOSO_PW, VIRTUOSO_PORT
+from common import setup_logger
 
 logger = logging.getLogger()
 
@@ -2491,27 +2492,45 @@ def main(query_dir, queries, desc, predicate_tbl=None, extra_fact_extractor=None
     parser.add_argument('work_dir', type=str, help="diffts's work directory for factbase construction")
     parser.add_argument('proj_id', type=str, help='project id')
 
+    parser.add_argument('--port', dest='port', default=VIRTUOSO_PORT,
+                        metavar='PORT', type=int, help='set port number')
+
+    parser.add_argument('--pw', dest='pw', metavar='PASSWORD', default=VIRTUOSO_PW,
+                        help='set password to access DB')
+
     parser.add_argument('-m', '--method', dest='method', default='odbc',
                         metavar='METHOD', type=str, help='execute query via METHOD (http|odbc)')
 
     parser.add_argument('-d', '--debug', dest='debug', action='store_true', help='enable debug printing')
-    parser.add_argument('-c', '--enable-change-enumeration', dest='change_enumeration', action='store_true', help='enable change enumeration')
+
+    parser.add_argument('-c', '--enable-change-enumeration', dest='change_enumeration', action='store_true',
+                        help='enable change enumeration')
+
     parser.add_argument('-o', '--outdir', dest='outdir', default='.',
                         metavar='DIR', type=str, help='dump result into DIR')
+
     parser.add_argument('-f', '--fact-outdir', dest='foutdir', default=DEFAULT_FACT_OUTPUT_DIR,
                         metavar='DIR', type=str, help='dump fact into DIR')
+
     parser.add_argument('-l', '--limit', dest='limit', default=None,
                         metavar='N', type=int, help='at most N instances are reported for each version pair')
-    parser.add_argument('-p', '--force-per-ver', dest='per_ver', action='store_true', help='force complex queries to be executed per version pairs')
+
+    parser.add_argument('--force-per-ver', dest='per_ver', action='store_true',
+                        help='force complex queries to be executed per version pairs')
+
     parser.add_argument('--query-prec', dest='query_prec', action='store_true', help='recognize query precedence')
+
     parser.add_argument('--lang', dest='lang', default=None,
                         metavar='LANG', type=str, help='query only for LANG (c|java|fortran)')
 
     args = parser.parse_args()
 
-    logger.debug_flag = args.debug
+    log_level = logging.INFO
+    if args.debug:
+        log_level = logging.DEBUG
+    setup_logger(logger, log_level)
 
     find(query_dir, queries, predicate_tbl, extra_fact_extractor,
-         args.work_dir, args.proj_id, args.foutdir, args.outdir, VIRTUOSO_PW, VIRTUOSO_PORT,
+         args.work_dir, args.proj_id, args.foutdir, args.outdir, args.pw, args.port,
          args.limit, args.lang, args.method,
          args.change_enumeration, args.per_ver, args.query_prec)
