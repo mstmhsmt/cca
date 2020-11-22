@@ -29,7 +29,7 @@ import project
 import sparql
 from ns import VER_NS, FB_NS
 import virtuoso
-from virtuoso import VIRTUOSO_PW, DEFAULT_PORT
+from virtuoso import VIRTUOSO_PW, VIRTUOSO_PORT
 from common import setup_logger
 
 logger = logging.getLogger()
@@ -49,7 +49,7 @@ INSERT_PAT = re.compile(r'insert', re.I)
 
 class Materializer(object):
     def __init__(self, qdir, queries, proj_id,
-                 method='odbc', pw=VIRTUOSO_PW, port=DEFAULT_PORT, conf=None):
+                 method='odbc', pw=VIRTUOSO_PW, port=VIRTUOSO_PORT, conf=None):
         self._query_dir = qdir
         self._queries = queries
         self._proj_id = proj_id
@@ -136,17 +136,22 @@ class Materializer(object):
 
 
 
-def main(qdir, queries, desc, pw=VIRTUOSO_PW):
+def main(qdir, queries, desc):
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
     parser = ArgumentParser(description=desc,
                             formatter_class=ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('proj_id', type=str, help='project id')
+
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
                         help='enable debug printing')
-    parser.add_argument('-p', '--port', dest='port', default=1111,
+
+    parser.add_argument('--port', dest='port', default=VIRTUOSO_PORT,
                         metavar='PORT', type=int, help='port number')
+
+    parser.add_argument('--pw', dest='pw', metavar='PASSWORD', default=VIRTUOSO_PW,
+                        help='set password to access FB')
 
 
     args = parser.parse_args()
@@ -157,7 +162,7 @@ def main(qdir, queries, desc, pw=VIRTUOSO_PW):
     setup_logger(logger, log_level)
 
 
-    m = Materializer(qdir, queries, args.proj_id, pw=pw, port=args.port)
+    m = Materializer(qdir, queries, args.proj_id, pw=args.pw, port=args.port)
 
     m.materialize()
 
