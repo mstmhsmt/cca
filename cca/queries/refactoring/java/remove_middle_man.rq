@@ -73,23 +73,23 @@ WHERE {
 
           ?ver ver:next ?ver_ .
 
-          {
-            SELECT DISTINCT ?serverM ?delegateMname
-            WHERE {
+          # {
+          #   SELECT DISTINCT ?serverM ?delegateMname
+          #   WHERE {
 
               ?invoke2 a java:PrimaryMethodInvocation ;
                        java:inMethod ?serverM ;
                        java:name ?delegateMname ;
                        chg:removal ?e3_ .
 
-            } GROUP BY ?serverM ?delegateMname
-          }
+          #   } GROUP BY ?serverM ?delegateMname
+          # }
 
           ?e3_ ver:version ?ver_ .
 
-          {
-            SELECT DISTINCT ?ServerC ?ServerC_ ?DelegateCname ?DelegateCname_
-            WHERE {
+          # {
+          #   SELECT DISTINCT ?ServerC ?ServerC_ ?DelegateCname ?DelegateCname_
+          #   WHERE {
 
               ?delegateT a java:ReferenceType ;
                          java:inField ?delegateF ;
@@ -106,8 +106,8 @@ WHERE {
               ?delegateF_ a java:FieldDeclaration ;
                           java:inClass ?ServerC_ .
               
-            } GROUP BY ?ServerC ?ServerC_ ?DelegateCname ?DelegateCname_
-          }
+          #   } GROUP BY ?ServerC ?ServerC_ ?DelegateCname ?DelegateCname_
+          # }
 
            FILTER (?ServerCname != ?DelegateCname)
            FILTER (?ServerCname_ != ?DelegateCname_)
@@ -117,9 +117,9 @@ WHERE {
         ?e4_ ?serverMname ?ServerC ?ServerC_
       }
 
-      {
-        SELECT DISTINCT ?DelegateC ?DelegateC_ ?delegateMname ?delegateMname_ 
-        WHERE {
+      # {
+      #   SELECT DISTINCT ?DelegateC ?DelegateC_ ?delegateMname ?delegateMname_
+      #   WHERE {
 
           ?delegateM a java:MethodDeclaration ;
                      java:inClass ?DelegateC ;
@@ -130,8 +130,8 @@ WHERE {
                       java:inClass ?DelegateC_ ;
                       java:name ?delegateMname_ .
 
-        } GROUP BY ?DelegateC ?DelegateC_ ?delegateMname ?delegateMname_ 
-      }
+      #   } GROUP BY ?DelegateC ?DelegateC_ ?delegateMname ?delegateMname_
+      # }
 
       FILTER EXISTS {
         ?DelegateC a java:ClassDeclaration ;

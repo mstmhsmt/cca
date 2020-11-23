@@ -115,6 +115,9 @@ def main():
     parser.add_argument('--shuffle', dest='shuffle', type=int, metavar='N', default=0,
                         help='shuffle delta components N times')
 
+    parser.add_argument('--ignore-unmodified', dest='ignore_unmodified', action='store_true',
+                        help='do not analyze unmodified files')
+
     parser.add_argument('--custom-split', dest='custom_split', action='store_true',
                         help='enable custom split')
 
@@ -216,6 +219,7 @@ def main():
                   fact_versions=[conf.mkver_for_fact_by_name(v) for v in [v_good, v_bad]],
                   fact_proj=proj_id,
                   fact_proj_roots=[dir_good, dir_bad],
+                  ignore_unmodified=args.ignore_unmodified,
                   fact_for_changes=True,
                   fact_for_mapping=True,
                   fact_for_ast=True,

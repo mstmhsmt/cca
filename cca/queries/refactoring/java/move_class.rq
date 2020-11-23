@@ -22,20 +22,20 @@ WHERE {
 
   ?class a java:TypeDeclaration ;
          java:name ?cname ;
-         java:fullyQualifiedName ?cfqn .
+         java:fullyQualifiedName ?cfqn ;
+         ver:version ?ver .
 
   ?class_ a java:TypeDeclaration ;
           java:name ?cname ;
-          java:fullyQualifiedName ?cfqn_ .
+          java:fullyQualifiedName ?cfqn_ ;
+          ver:version ?ver_ .
 
-  ?class ver:version ?ver .
-  ?class_ ver:version ?ver_ .
-  ?ver ver:next ?ver_ .
-
-  FILTER (?cfqn != ?cfqn_)
+  FILTER EXISTS {
+    ?ver ver:next ?ver_ .
+  }
 
   {
-    FILTER EXISTS {
+    #FILTER EXISTS {
       ?pdecl a java:PackageDeclaration ;
              src:parent ?cu ;
              java:name ?pname ;
@@ -52,29 +52,39 @@ WHERE {
 
       ?class src:parent+ ?cu .
       ?class_ src:parent+ ?cu_ .
-    }
+    #}
   }
   UNION
   {
-    ?class chg:removal ?ctx_ .
-    ?class_ chg:addition ?ctx .
+    ?class a java:TypeDeclaration ;
+           java:name ?cname ;
+           java:fullyQualifiedName ?cfqn ;
+           ver:version ?ver ;
+           chg:removal ?ctx_ .
+
+    ?class_ a java:TypeDeclaration ;
+            java:name ?cname ;
+            java:fullyQualifiedName ?cfqn_ ;
+            ver:version ?ver_ ;
+            chg:addition ?ctx .
     {
-      SELECT DISTINCT ?ver ?cname (COUNT(DISTINCT ?class) AS ?count)
+      SELECT DISTINCT ?ver ?cname (COUNT(DISTINCT ?class0) AS ?count)
       WHERE {
-        ?class a java:TypeDeclaration ;
-               ver:version ?ver ;
-               java:name ?cname .
+        ?class0 a java:TypeDeclaration ;
+                ver:version ?ver ;
+                java:name ?cname .
       } GROUP BY ?ver ?cname
     }
+    FILTER (?count = 1)
     {
-      SELECT DISTINCT ?ver_ ?cname (COUNT(DISTINCT ?class_) AS ?count_)
+      SELECT DISTINCT ?ver_ ?cname (COUNT(DISTINCT ?class0_) AS ?count_)
       WHERE {
-        ?class_ a java:TypeDeclaration ;
-                ver:version ?ver_ ;
-                java:name ?cname .
+        ?class0_ a java:TypeDeclaration ;
+                 ver:version ?ver_ ;
+                 java:name ?cname .
       } GROUP BY ?ver_ ?cname
     }
-    FILTER (?count = 1 && ?count_ = 1)
+    FILTER (?count_ = 1)
   }
   UNION
   {
@@ -91,7 +101,6 @@ WHERE {
             java:refersToDeclaration ?class_ .
     }
   }
-
 
 }
 
