@@ -22,7 +22,7 @@ If you want to install some packages or other files required to implement build 
 
 You can also try a language agnostic DD/Plain (DDP for short) that relies on `diff` command for differencing programs. The results will be placed at `logback_ddj/__CCA__YYYYMMDDHHMMSS/dd/delta/`.
 
-    $ ./cca.py ddjava --include logback-access/src/main/java --include logback-classic/src/main/java --include logback-core/src/main/java --lang java logback_ddj 1183g 1183b
+    $ ./cca.py ddplain --include logback-access/src/main/java --include logback-classic/src/main/java --include logback-core/src/main/java --lang java logback_ddj 1183g 1183b
 
 Note that `--lang` option filters source files by their extensions. That is, `--lang java` means that the tool scan only `*.java`. You can append `--lang` options to add other source files of interest.
 
