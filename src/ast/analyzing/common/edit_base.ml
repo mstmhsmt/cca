@@ -713,13 +713,22 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
     DEBUG_MSG "total=%d (minsize=%d)" total minsize;
     total
 
-  method get_nrelabeled_nodes =
+  method get_nrelabeled_nodes ?(orig=false) () =
     let count = ref 0 in
     self#iter_relabels
       (function
-	| Relabel(_, (_, inf1, excl1), (_, inf2, excl2)) ->
+	| Relabel(_, (_, inf1, excl1), (_, inf2, excl2)) when orig -> begin
+            let nd1 = Info.get_node inf1 in
+            let nd2 = Info.get_node inf2 in
+            if nd1#data#is_named_orig || nd2#data#is_named_orig then begin
+	      let sz = Info.get_size inf1 in
+	      count := !count + sz
+            end
+        end
+	| Relabel(_, (_, inf1, excl1), (_, inf2, excl2)) -> begin
 	    let sz = Info.get_size inf1 in
 	    count := !count + sz
+        end
 	| _ -> assert false
       );
     !count
@@ -728,26 +737,33 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
   method get_nedited_nodes =
     let ndel = self#get_ndeleted_nodes in
     let nins = self#get_ninserted_nodes in
-    let nrel = self#get_nrelabeled_nodes in
-    let nmov = self#get_nmoved_nodes () in
+    let nrel = self#get_nrelabeled_nodes() in
+    let nmov = self#get_nmoved_nodes() in
     ndel + nins + nrel + nmov
 
 
   method get_nmoved_and_relabeled_nodes 
       ?(minsize=1)
+      ?(orig=false)
       tree1
       uidmapping
       =
     let count_tbl = Hashtbl.create 0 in (* mid -> count *)
     self#iter_moves
       (function
-	| Move(mid, _, (u1, inf1, excl1), (_, _, _)) ->
+	| Move(mid, _, (u1, inf1, excl1), (_, _, _)) -> begin
 	    tree1#scan_initial_cluster 
 	      (Info.get_node inf1, List.map Info.get_node !excl1) 
 	      (fun n -> 
 		try
 		  let u' = uidmapping#find n#uid in
-		  if self#mem_rel12 n#uid u' then begin
+                  let extra_cond =
+                    not orig ||
+                    (n#data#is_named_orig ||
+                    let n' = uidmapping#search_node_by_uid2 u' in
+                    n'#data#is_named_orig)
+                  in
+		  if self#mem_rel12 n#uid u' && extra_cond then begin
 		    try
 		      let c = Hashtbl.find count_tbl !mid in
 		      Hashtbl.replace count_tbl !mid (c + 1)
@@ -757,7 +773,7 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
 		with 
 		  Not_found -> assert false
 	      )
-
+        end
 	| _ -> assert false
       );
     Hashtbl.fold
@@ -1284,9 +1300,10 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
 
   method private dump_diff_ch
       ~header ~footer ~formatters
-      ?(line_align=[]) 
-      (tree1 : 'tree_t) (tree2 : 'tree_t) 
-      ch 
+      ?(line_align=[])
+      ?(minimal=true)
+      (tree1 : 'tree_t) (tree2 : 'tree_t)
+      ch
       =
 
     DEBUG_MSG "* DUMPING DIFF DATA (%d edit(s))\n" self#get_nedits;
@@ -1339,13 +1356,22 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
 	      output_string ch (formatters#insert st ed segs)
 		
 	  | Relabel(movrel, (uid1, info1, excludes1), (uid2, info2, excludes2)) ->
-              let loc1 = Info.get_loc info1 in
-              let loc2 = Info.get_loc info2 in
-              let st1, ed1 = loc1.Loc.start_offset, loc1.Loc.end_offset in
-              let st2, ed2 = loc2.Loc.start_offset, loc2.Loc.end_offset in
-	      let segs1 = get_segments info1 excludes1 in
-	      let segs2 = get_segments info2 excludes2 in
-	      output_string ch (formatters#relabel !movrel st1 ed1 segs1 st2 ed2 segs2)
+              let ok =
+                not minimal ||
+                let n1 = Info.get_node info1 in
+                let n2 = Info.get_node info2 in
+                n1#data#is_named_orig && n2#data#is_named_orig ||
+                n1#data#more_anonymized_label <> n2#data#more_anonymized_label
+              in
+              if ok then begin
+                let loc1 = Info.get_loc info1 in
+                let loc2 = Info.get_loc info2 in
+                let st1, ed1 = loc1.Loc.start_offset, loc1.Loc.end_offset in
+                let st2, ed2 = loc2.Loc.start_offset, loc2.Loc.end_offset in
+	        let segs1 = get_segments info1 excludes1 in
+	        let segs2 = get_segments info2 excludes2 in
+	        output_string ch (formatters#relabel !movrel st1 ed1 segs1 st2 ed2 segs2)
+              end
 
 	  | Move(mid, _, (_, info1, _), (_, info2, _)) as mov ->
 	      let skip =
@@ -1690,6 +1716,23 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
       ) unmodified
   (* end of method dump_diff_summary_ch *)
 
+  method get_spm uidmapping =
+    let count = ref 0 in
+    uidmapping#iter
+      (fun uid1 uid2 ->
+        if self#mem_mov12 uid1 uid2 then
+          ()
+        else
+          let nd1 = uidmapping#search_node_by_uid1 uid1 in
+	  let nd2 = uidmapping#search_node_by_uid2 uid2 in
+          if
+            nd1#data#eq nd2#data ||
+            not nd1#data#is_named_orig && not nd2#data#is_named_orig &&
+            nd1#data#more_anonymized_label = nd2#data#more_anonymized_label
+          then
+            incr count
+      );
+    !count
 
   method get_diff_stat tree1 tree2 uidmapping =
     let _, _, units, unmodified =
@@ -1700,9 +1743,11 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
 
     let ndels    = self#get_ndeleted_nodes in
     let ninss    = self#get_ninserted_nodes in
-    let nrels    = self#get_nrelabeled_nodes in
+    let nrels    = self#get_nrelabeled_nodes() in
     let nmovrels = self#get_nmoved_and_relabeled_nodes tree1 uidmapping in
-    let nmovs    = self#get_nmoved_nodes () in
+    let nrels_orig    = self#get_nrelabeled_nodes ~orig:true () in
+    let nmovrels_orig = self#get_nmoved_and_relabeled_nodes ~orig:true tree1 uidmapping in
+    let nmovs    = self#get_nmoved_nodes() in
 
     let nmovrels2 = self#get_nmoved_and_relabeled_nodes ~minsize:2 tree1 uidmapping in
     let nmovs2    = self#get_nmoved_nodes ~minsize:2 () in
@@ -1719,7 +1764,7 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
       if total = 0 then
         "1.0"
       else
-        let spm = nmaps - nmovs - nrels + nmovrels in
+        let spm = self#get_spm uidmapping(*nmaps - nmovs - nrels_orig + nmovrels_orig*) in
         let _sim = float (spm * 2) /. float (nnodes1 + nnodes2) in
         sprintf "%.6f" _sim
     in
@@ -1741,8 +1786,10 @@ class ['node_t, 'tree_t] seq_base options = object (self : 'edits)
       s_inserts     = ninss;
       s_inserts_gr  = ninsgrs;
       s_relabels    = nrels;
+      s_relabels_orig = nrels_orig;
       s_relabels_gr = self#get_nrelabels;
       s_movrels     = nmovrels;
+      s_movrels_orig = nmovrels_orig;
       s_moves       = nmovs;
       s_moves_gr    = nmovgrs;
       s_mapping     = nmaps;

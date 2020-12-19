@@ -175,9 +175,9 @@ class seq options = object (self)
 
   method private _dump_diff_ch
       ~header ~footer ~formatters
-      ?(line_align=[]) 
-      (tree1 : 'tree_t) (tree2 : 'tree_t) 
-      ch 
+      ?(line_align=[])
+      (tree1 : 'tree_t) (tree2 : 'tree_t)
+      ch
       =
     let ignored1 = tree1#ignored_regions in
     let ignored2 = tree2#ignored_regions in
@@ -391,7 +391,7 @@ let dump_changes options lang tree1 tree2 uidmapping edits_copy edits file =
       end;
       Xprint.verbose options#verbose_flag "done.";
     in (* dumper *)
-
+(*
     let csv_dumper ch =
       Xprint.verbose options#verbose_flag "dumping csv...";
 
@@ -456,9 +456,9 @@ let dump_changes options lang tree1 tree2 uidmapping edits_copy edits file =
 	Xprint.verbose options#verbose_flag "done.";
       end
     in (* csv_dumper *)
-
+*)
     Xfile.dump file dumper;
-    Xfile.dump (file^".csv") csv_dumper;
+    (*Xfile.dump (file^".csv") csv_dumper;*)
 
     if options#fact_for_changes_flag && not (Xset.is_empty triples) then begin
       Xprint.verbose options#verbose_flag "dumping change fact...";
